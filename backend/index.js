@@ -1,15 +1,14 @@
+require('dotenv').config();
 const express = require('express');
-const { Pool } = require('pg');
 const app = express();
-const port = 3001;
+const port = process.env.PORT || 3001;
 
-const pool = new Pool({
-  user: 'postgres',
-  host: 'localhost',
-  database: 'interlink',
-  password: 'your_password', // Change this to your PostgreSQL password
-  port: 5432,
-});
+// parse JSON bodies
+app.use(express.json());
+
+// wire auth routes
+const authRoutes = require('./auth/routes');
+app.use('/auth', authRoutes);
 
 app.get('/', (req, res) => {
   res.send('Hello from InterLink Backend!');
