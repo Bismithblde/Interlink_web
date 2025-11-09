@@ -31,9 +31,70 @@
   box-shadow: 0 12px 25px -18px rgba(14, 116, 144, 0.55);
 }
 
+.rbc-event.schedule-event {
+  border: 0;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #000000 !important;
+  box-shadow: 0 12px 25px -18px rgba(14, 116, 144, 0.55);
+  text-align: center;
+}
+
+.schedule-event .rbc-event-label {
+  display: none;
+}
+
+.schedule-event .rbc-event-content {
+  text-align: center;
+  color: #000000;
+}
+
+.rbc-day-slot .rbc-slot-selection,
+.rbc-day-slot .rbc-addons-dnd-drag-preview,
+.rbc-day-slot .rbc-event {
+  left: 0 !important;
+  transform: none;
+  width: 100%;
+  border-radius: 0.75rem;
+}
+
+.rbc-day-slot .rbc-addons-dnd-drag-preview {
+  overflow: hidden;
+}
+
 .rbc-toolbar button {
   text-transform: uppercase;
   font-weight: 600;
   letter-spacing: 0.2em;
   font-size: 0.65rem;
+}
+
+.notebook-scene {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+.notebook-canvas {
+  transition: box-shadow 0.35s ease, transform 0.35s ease;
+}
+
+.notebook-canvas::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 32px;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(
+    140deg,
+    rgba(14, 165, 233, 0.12),
+    rgba(125, 211, 252, 0.08)
+  );
+  transition: opacity 0.45s ease;
+}
+
+.notebook-canvas:hover::after {
+  opacity: 1;
 }

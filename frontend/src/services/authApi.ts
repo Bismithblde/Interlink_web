@@ -76,11 +76,42 @@ const request = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
   return (payload ?? ({} as T)) as T;
 };
 
+const sanitizeSignupBody = (payload: SignupPayload) => {
+  const body: Record<string, unknown> = {
+    email: payload.email,
+    password: payload.password,
+    name: payload.name,
+  };
+
+  if (typeof payload.major === "string" && payload.major.trim()) {
+    body.major = payload.major.trim();
+  }
+
+  if (typeof payload.age === "number" && Number.isFinite(payload.age)) {
+    body.age = payload.age;
+  }
+
+  if (Array.isArray(payload.hobbies) && payload.hobbies.length > 0) {
+    body.hobbies = payload.hobbies
+      .map((hobby) => `${hobby}`.trim())
+      .filter((hobby) => hobby.length > 0);
+  }
+
+  body.profile = {
+    name: payload.name,
+    major: body.major,
+    age: body.age,
+    hobbies: body.hobbies,
+  };
+
+  return body;
+};
+
 export const authApi = {
-  async signUp({ email, password }: SignupPayload) {
+  async signUp(payload: SignupPayload) {
     return request<{ user: SupabaseUser | null }>("/auth/signup", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(sanitizeSignupBody(payload)),
     });
   },
 
@@ -97,6 +128,19 @@ export const authApi = {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
+    });
+  },
+
+  async updateProfile(
+    accessToken: string,
+    profileUpdates: Record<string, unknown>
+  ) {
+    return request<{ user: SupabaseUser | null }>("/auth/profile", {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(profileUpdates),
     });
   },
 };

@@ -1,8 +1,12 @@
-import { FormEvent, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import AuthLayout from "../components/AuthLayout";
 import AuthHeading from "../components/AuthHeading";
 import AuthInput from "../components/AuthInput";
+import { authApi, AuthApiError } from "../services/authApi";
+import type { SupabaseUser } from "../types/user";
+import { useAuth } from "../context/AuthContext";
 
 type SurveyLocationState = {
   name?: string;
@@ -12,45 +16,162 @@ type SurveyLocationState = {
 const SurveyPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { login, user } = useAuth();
   const locationState = (location.state ?? null) as SurveyLocationState;
 
-  const initialName = useMemo(() => locationState?.name ?? "", [locationState]);
+  const userMetadata = useMemo(
+    () =>
+      (user as unknown as { user_metadata?: Record<string, unknown> })
+        ?.user_metadata ?? {},
+    [user]
+  );
+
+  const toInputList = (value: unknown) => {
+    if (Array.isArray(value)) {
+      return value.map((entry) => `${entry}`.trim()).join(", ");
+    }
+    if (typeof value === "string") {
+      return value;
+    }
+    return "";
+  };
+
+  const metadataName =
+    typeof userMetadata.name === "string" && userMetadata.name.trim()
+      ? userMetadata.name.trim()
+      : undefined;
+  const metadataPreferredEmail =
+    typeof userMetadata.preferredEmail === "string" &&
+    userMetadata.preferredEmail.trim()
+      ? userMetadata.preferredEmail.trim()
+      : undefined;
+  const metadataMajor =
+    typeof userMetadata.major === "string" && userMetadata.major.trim()
+      ? userMetadata.major.trim()
+      : "";
+  const metadataFavoriteSpot =
+    typeof userMetadata.favoriteSpot === "string"
+      ? userMetadata.favoriteSpot
+      : "";
+
+  const initialName = useMemo(
+    () => locationState?.name ?? metadataName ?? "",
+    [locationState, metadataName]
+  );
   const initialEmail = useMemo(
-    () => locationState?.email ?? "",
-    [locationState]
+    () =>
+      locationState?.email ??
+      metadataPreferredEmail ??
+      (typeof user?.email === "string" ? user.email : ""),
+    [locationState, metadataPreferredEmail, user]
   );
 
   const [displayName, setDisplayName] = useState(initialName);
-  const [headline, setHeadline] = useState("");
-  const [company, setCompany] = useState("");
-  const [experienceLevel, setExperienceLevel] = useState("");
-  const [focusArea, setFocusArea] = useState("");
-  const [bio, setBio] = useState("");
+  const [age, setAge] = useState(
+    typeof userMetadata.age === "number" ? `${userMetadata.age}` : ""
+  );
+  const [major, setMajor] = useState(metadataMajor);
+  const [interests, setInterests] = useState(
+    toInputList(userMetadata.interests)
+  );
+  const [hobbies, setHobbies] = useState(toInputList(userMetadata.hobbies));
+  const [classes, setClasses] = useState(toInputList(userMetadata.classes));
+  const [favoriteSpot, setFavoriteSpot] = useState(metadataFavoriteSpot);
   const [preferredEmail, setPreferredEmail] = useState(initialEmail);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const extractAccessToken = () => {
+    try {
+      const raw = localStorage.getItem("interlink.auth.session");
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed?.session?.access_token ?? null;
+    } catch (error) {
+      console.warn("[SurveyPage] Failed to read stored session", error);
+      return null;
+    }
+  };
+
+  const toList = (value: string) =>
+    value
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!displayName || !preferredEmail || !focusArea) {
+    const trimmedName = displayName.trim();
+    const trimmedEmail = preferredEmail.trim();
+    const ageString = `${age}`.trim();
+    const hobbyList = toList(hobbies);
+    const interestList = toList(interests);
+    const classList = toList(classes);
+
+    if (!trimmedName || !trimmedEmail || !ageString || hobbyList.length === 0) {
       setErrorMessage(
-        "Please share at least your name, contact email, and focus area."
+        "Please share your name, contact email, age, and a few hobbies."
       );
       return;
     }
 
     setIsSubmitting(true);
     setErrorMessage(null);
+    setSuccessMessage(null);
 
-    setTimeout(() => {
+    try {
+      const accessToken = extractAccessToken();
+      if (!accessToken) {
+        throw new Error(
+          "Your session has expired. Please log out and log back in."
+        );
+      }
+
+      const trimmedFavoriteSpot = favoriteSpot.trim();
+      const trimmedMajor = major.trim();
+
+      const profilePayload: Record<string, unknown> = {
+        name: trimmedName,
+        preferredEmail: trimmedEmail,
+        hobbies: hobbyList,
+        interests: interestList,
+        classes: classList,
+        favoriteSpot: trimmedFavoriteSpot || undefined,
+        major: trimmedMajor || undefined,
+      };
+
+      const numericAge = Number(ageString);
+      if (!Number.isNaN(numericAge)) {
+        profilePayload.age = numericAge;
+      }
+
+      const response = await authApi.updateProfile(
+        accessToken,
+        profilePayload
+      );
+
+      const updatedUser = response.user as SupabaseUser | undefined;
+      if (updatedUser) {
+        login(updatedUser);
+      }
+
       setSuccessMessage(
         "Thanks! Your profile survey is saved. We’ll take you to your profile."
       );
+      setTimeout(() => navigate("/profile"), 800);
+    } catch (error) {
+      const message =
+        error instanceof AuthApiError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : "We couldn't save your survey right now. Please try again.";
+      setErrorMessage(message);
+    } finally {
       setIsSubmitting(false);
-      setTimeout(() => navigate("/profile"), 1200);
-    }, 600);
+    }
   };
 
   return (
@@ -61,9 +182,9 @@ const SurveyPage = () => {
           onSubmit={handleSubmit}
         >
           <AuthHeading
-            title="Tell Us About You"
+            title="Shape Your Profile"
             eyebrow="Profile Survey"
-            description="You’re almost done! Share a few details so we can personalize your workspace."
+            description="You're almost done! Share a few personality details so your future collaborators can get a sense of your vibe."
           />
 
           <div className="grid w-full gap-6 text-left text-sm font-medium text-slate-600">
@@ -89,62 +210,66 @@ const SurveyPage = () => {
             />
 
             <AuthInput
-              id="headline"
-              label="Headline"
-              placeholder="Product Manager at Interlink"
-              value={headline}
-              onChange={(event) => setHeadline(event.target.value)}
-            />
-
-            <AuthInput
-              id="company"
-              label="Company"
-              placeholder="Interlink Labs"
-              value={company}
-              onChange={(event) => setCompany(event.target.value)}
-            />
-
-            <label
-              className="flex items-center gap-6"
-              htmlFor="experienceLevel"
-            >
-              <span className="w-32 shrink-0 text-xs uppercase tracking-wide text-slate-400">
-                Experience
-              </span>
-              <select
-                id="experienceLevel"
-                className="flex-1 rounded-full border border-dashed border-slate-300 bg-white/90 px-6 py-3 text-slate-700 shadow-inner shadow-white/40 outline-none transition hover:border-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-300/60"
-                value={experienceLevel}
-                onChange={(event) => setExperienceLevel(event.target.value)}
-              >
-                <option value="">Select your experience level</option>
-                <option value="student">Student / Learner</option>
-                <option value="entry">0-2 years</option>
-                <option value="mid">3-6 years</option>
-                <option value="senior">7-12 years</option>
-                <option value="lead">13+ years</option>
-              </select>
-            </label>
-
-            <AuthInput
-              id="focusArea"
-              label="Focus Area"
-              placeholder="Product strategy, automation, integrations…"
-              value={focusArea}
-              onChange={(event) => setFocusArea(event.target.value)}
+              id="age"
+              label="Age"
+              type="number"
+              min="13"
+              max="120"
+              placeholder="20"
+              inputMode="numeric"
+              value={age}
+              onChange={(event) => setAge(event.target.value)}
               required
             />
 
-            <label className="flex items-start gap-6" htmlFor="bio">
+            <AuthInput
+              id="interests"
+              label="Top Interests"
+              placeholder="AI, robotics, design labs…"
+              value={interests}
+              onChange={(event) => setInterests(event.target.value)}
+            />
+
+            <AuthInput
+              id="major"
+              label="Major"
+              placeholder="Computer Science"
+              value={major}
+              onChange={(event) => setMajor(event.target.value)}
+            />
+
+            <label className="flex items-start gap-6" htmlFor="hobbies">
               <span className="w-32 shrink-0 pt-3 text-xs uppercase tracking-wide text-slate-400">
-                Bio
+                Hobbies
               </span>
               <textarea
-                id="bio"
-                placeholder="Share a quick snapshot of what you’re working on."
-                className="h-32 flex-1 rounded-3xl border border-dashed border-slate-300 bg-white/90 px-6 py-4 text-sm text-slate-700 shadow-inner shadow-white/40 outline-none transition hover:border-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-300/60"
-                value={bio}
-                onChange={(event) => setBio(event.target.value)}
+                id="hobbies"
+                placeholder="List a few favorite ways you recharge. Separate with commas."
+                className="h-24 flex-1 rounded-3xl border border-dashed border-slate-300 bg-white/90 px-6 py-4 text-sm text-slate-700 shadow-inner shadow-white/40 outline-none transition hover:border-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-300/60"
+                value={hobbies}
+                onChange={(event) => setHobbies(event.target.value)}
+                required
+              />
+            </label>
+
+            <AuthInput
+              id="favoriteSpot"
+              label="Favorite Spot"
+              placeholder="Innovation hub mezzanine, campus greenhouse..."
+              value={favoriteSpot}
+              onChange={(event) => setFavoriteSpot(event.target.value)}
+            />
+
+            <label className="flex items-start gap-6" htmlFor="classes">
+              <span className="w-32 shrink-0 pt-3 text-xs uppercase tracking-wide text-slate-400">
+                Classes
+              </span>
+              <textarea
+                id="classes"
+                placeholder="List courses you're taking. Separate with commas."
+                className="h-24 flex-1 rounded-3xl border border-dashed border-slate-300 bg-white/90 px-6 py-4 text-sm text-slate-700 shadow-inner shadow-white/40 outline-none transition hover:border-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-300/60"
+                value={classes}
+                onChange={(event) => setClasses(event.target.value)}
               />
             </label>
           </div>

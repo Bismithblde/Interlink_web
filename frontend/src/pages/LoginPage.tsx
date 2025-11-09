@@ -1,10 +1,10 @@
 import { useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import ringsArt from "../assets/rings.png";
 import AuthHeading from "../components/AuthHeading";
 import AuthInput from "../components/AuthInput";
 import AuthLayout from "../components/AuthLayout";
+import NotebookCanvas from "../components/NotebookCanvas";
 import type {
   AuthCredentials,
   SignInResponse,
@@ -54,6 +54,10 @@ const LoginPage = () => {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
+    if (isSubmitting) {
+      return;
+    }
+
     if (!credentials.email || !credentials.password) {
       setErrorMessage("Please fill in both email and password.");
       return;
@@ -98,7 +102,8 @@ const LoginPage = () => {
         profile?.email ?? profile?.id ?? credentials.email ?? "there";
       setSuccessMessage(`Welcome back, ${welcomeName}! Redirecting you now…`);
 
-      setTimeout(() => {
+      window.setTimeout(() => {
+        setIsSubmitting(false);
         navigate("/");
       }, 800);
     } catch (error) {
@@ -108,7 +113,6 @@ const LoginPage = () => {
           : "We could not sign you in right now. Please try again.";
       console.error("[LoginPage] Sign-in failure", error);
       setErrorMessage(message);
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -116,81 +120,71 @@ const LoginPage = () => {
   return (
     <AuthLayout>
       <div className="flex w-full flex-col items-center gap-10 px-2 text-center">
-        <form
-          className="relative flex w-full flex-col items-center gap-6 rounded-[32px] border border-white/60 bg-white/95 px-10 py-16 text-center shadow-[0_30px_90px_-40px_rgba(15,118,110,0.45)]"
-          onSubmit={handleSubmit}
-        >
-          <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 -translate-y-[45%] select-none">
-            <img
-              src={ringsArt}
-              alt="Notebook binding rings"
-              className="scale-200"
-              draggable={false}
+        <div className="notebook-scene w-full max-w-xl">
+          <NotebookCanvas as="form" onSubmit={handleSubmit}>
+            <AuthHeading
+              title="Login"
+              eyebrow="Interlink Notebook"
+              description="Welcome back. Enter your credentials to continue exploring Interlink."
             />
-          </div>
 
-          <AuthHeading
-            title="Login"
-            eyebrow="Interlink Notebook"
-            description="Welcome back. Enter your credentials to continue exploring Interlink."
-          />
+            <div className="mt-4 grid w-full gap-6 text-left text-sm font-medium text-slate-600">
+              <AuthInput
+                id="email"
+                label="Email"
+                type="email"
+                autoComplete="email"
+                placeholder="you@example.com"
+                value={credentials.email}
+                onChange={handleCredentialChange("email")}
+                required
+              />
+              <AuthInput
+                id="password"
+                label="Password"
+                type="password"
+                autoComplete="current-password"
+                placeholder="••••••••"
+                value={credentials.password}
+                onChange={handleCredentialChange("password")}
+                required
+              />
+            </div>
 
-          <div className="mt-4 grid w-full gap-6 text-left text-sm font-medium text-slate-600">
-            <AuthInput
-              id="email"
-              label="Email"
-              type="email"
-              autoComplete="email"
-              placeholder="you@example.com"
-              value={credentials.email}
-              onChange={handleCredentialChange("email")}
-              required
-            />
-            <AuthInput
-              id="password"
-              label="Password"
-              type="password"
-              autoComplete="current-password"
-              placeholder="••••••••"
-              value={credentials.password}
-              onChange={handleCredentialChange("password")}
-              required
-            />
-          </div>
-
-          <button
-            type="submit"
-            className="mt-6 inline-flex items-center rounded-full bg-sky-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-500/30 transition hover:bg-sky-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 disabled:cursor-not-allowed disabled:bg-sky-300"
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? "Signing you in…" : "Log In"}
-          </button>
-
-          {errorMessage && (
-            <p className="text-sm font-medium text-red-600" role="alert">
-              {errorMessage}
-            </p>
-          )}
-          {successMessage && (
-            <p className="text-sm font-medium text-emerald-600" role="status">
-              {successMessage}
-            </p>
-          )}
-
-          <p className="text-xs font-medium uppercase tracking-[0.4em] text-sky-200/80">
-            Page 01
-          </p>
-          <p className="text-xs text-slate-500">
-            Need an account?{" "}
-            <Link
-              to="/signup"
-              className="font-semibold text-sky-500 underline decoration-dotted underline-offset-4 hover:text-sky-400"
+            <button
+              type="submit"
+              className="mt-6 inline-flex items-center rounded-full bg-sky-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-500/30 transition hover:bg-sky-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 disabled:cursor-not-allowed disabled:bg-sky-300"
+              disabled={isSubmitting}
             >
-              Create one here
-            </Link>
-            .
-          </p>
-        </form>
+              {isSubmitting ? "Signing you in…" : "Log In"}
+            </button>
+
+            {errorMessage && (
+              <p className="text-sm font-medium text-red-600" role="alert">
+                {errorMessage}
+              </p>
+            )}
+            {successMessage && (
+              <p className="text-sm font-medium text-emerald-600" role="status">
+                {successMessage}
+              </p>
+            )}
+
+            <p className="text-xs font-medium uppercase tracking-[0.4em] text-sky-200/80">
+              Page 01
+            </p>
+            <p className="text-xs text-slate-500">
+              Need an account?{" "}
+              <Link
+                to="/signup"
+                className="font-semibold text-sky-500 underline decoration-dotted underline-offset-4 hover:text-sky-400"
+              >
+                Create one here
+              </Link>
+              .
+            </p>
+          </NotebookCanvas>
+        </div>
       </div>
     </AuthLayout>
   );

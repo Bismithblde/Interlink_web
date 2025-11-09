@@ -13,7 +13,10 @@ export interface UserProfile {
   email: string;
   age?: number;
   major?: string;
+  interests?: string[];
+  classes?: string[];
   bio?: string;
+  favoriteSpot?: string;
   avatarUrl?: string;
   bannerUrl?: string;
   hobbies: string[];
@@ -72,6 +75,9 @@ export interface UpdateProfilePayload
       | "email"
       | "age"
       | "major"
+      | "interests"
+      | "classes"
+      | "favoriteSpot"
       | "bio"
       | "avatarUrl"
       | "bannerUrl"
