@@ -6,7 +6,10 @@ const maskToken = (token) => {
   return `${token.slice(0, 5)}…${token.slice(-5)}`;
 };
 
+const debugEnabled = process.env.AUTH_DEBUG === "true";
+
 const debug = (message, meta) => {
+  if (!debugEnabled) return;
   if (meta) {
     console.debug(`[authMiddleware] ${message}`, meta);
   } else {

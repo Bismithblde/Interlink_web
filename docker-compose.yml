@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./backend
+    environment:
+      SUPABASE_USE_STUB: ${SUPABASE_USE_STUB:-true}
+      PORT: "3001"
+    ports:
+      - "3001:3001"
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      VITE_BACKEND_URL: http://backend:3001
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+

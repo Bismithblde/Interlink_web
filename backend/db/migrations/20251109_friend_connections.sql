@@ -31,3 +31,4 @@ create table if not exists friendships (
 create index if not exists idx_friendships_friend on friendships (friend_id);
 
 
+

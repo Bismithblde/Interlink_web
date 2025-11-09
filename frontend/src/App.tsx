@@ -9,6 +9,7 @@ import { useAuth } from "./context/AuthContext";
 import DashboardPage from "./pages/DashboardPage";
 import TopNav from "./components/TopNav";
 import FriendsPage from "./pages/FriendsPage";
+import HangoutPlanner from "./pages/HangoutPlanner";
 
 function App() {
   const navigate = useNavigate();
@@ -36,6 +37,7 @@ function App() {
           <Route path="/schedule" element={<SchedulePage />} />
           <Route path="/find-friends" element={<FindFriend />} />
           <Route path="/friends" element={<FriendsPage />} />
+          <Route path="/hangout-planner" element={<HangoutPlanner />} />
         </Routes>
       </main>
     </div>

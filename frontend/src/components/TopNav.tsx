@@ -4,6 +4,7 @@ import {
   CalendarDays,
   LayoutDashboard,
   LogIn,
+  Sparkles,
   UserCircle2,
   UserPlus,
   UsersRound,
@@ -132,6 +133,10 @@ const TopNav = ({
               <NavLink to="/friends" className={navLinkClassName}>
                 <UsersRound className="h-4 w-4" />
                 <span className="hidden sm:inline">Friends</span>
+              </NavLink>
+              <NavLink to="/hangout-planner" className={navLinkClassName}>
+                <Sparkles className="h-4 w-4" />
+                <span className="hidden sm:inline">Hangout</span>
               </NavLink>
               <div className="relative">
                 <Popover

@@ -129,7 +129,7 @@ const FriendsPage = () => {
 
             return (
               <article
-                key={`${friend.id}-${friend.friendId ?? friend.requestId ?? "card"}`}
+                key={`${friend.id}-${profile.id ?? friend.requestId ?? "card"}`}
                 className="flex flex-col gap-4 rounded-3xl border border-slate-800/80 bg-slate-900/70 p-5 shadow-lg shadow-slate-950/50 transition hover:-translate-y-[2px] hover:border-sky-500/40 hover:shadow-sky-500/20"
               >
                 <header className="flex flex-col gap-1">

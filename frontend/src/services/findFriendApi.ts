@@ -154,6 +154,42 @@ export type ActivitySuggestion = {
   primaryReason?: string;
 };
 
+export type HangoutAgendaItem = {
+  label: string;
+  durationMinutes?: number;
+  detail?: string;
+};
+
+export type HangoutPlan = {
+  title: string;
+  summary: string;
+  agenda: HangoutAgendaItem[];
+  conversationStarters: string[];
+  sharedConnections: string[];
+  prepReminders: string[];
+  followUpIdeas: string[];
+  participants: string[];
+};
+
+export type HangoutPlanRequest = {
+  seeker: {
+    id: string;
+    name?: string;
+    major?: string;
+    hobbies?: string[];
+    interests?: string[];
+  };
+  friends: Array<{
+    id: string;
+    name?: string;
+    major?: string;
+    hobbies?: string[];
+    interests?: string[];
+  }>;
+  focus?: string;
+  durationMinutes?: number;
+};
+
 type ErrorPayload = {
   error?: string;
   message?: string;
@@ -336,7 +372,7 @@ const sanitizeUser = (user: MatchRequestPayload["user"]) => {
     funFact: sanitizeTextField(user.funFact),
     vibeCheck: sanitizeTextField(user.vibeCheck),
     bio: sanitizeTextField(user.bio),
-    instagram: sanitizeTextField(user.instagram),
+    instagram: sanitizeInstagram(user.instagram),
   };
 };
 
@@ -395,8 +431,7 @@ const transformMatches = (
             payload,
             sharedInterests.length
           );
-    const summary =
-      match.compatibilitySummary ?? describeMatch(match, payload);
+    const summary = match.compatibilitySummary ?? describeMatch(match, payload);
 
     return {
       id: match.matchId,
@@ -423,9 +458,10 @@ const transformMatches = (
       sharedInterests,
       sharedHobbies: match.sharedHobbies ?? [],
       clusterLabel: match.clusterLabel,
-      semanticSimilarity: typeof match.semanticSimilarity === "number"
-        ? Number(match.semanticSimilarity)
-        : undefined,
+      semanticSimilarity:
+        typeof match.semanticSimilarity === "number"
+          ? Number(match.semanticSimilarity)
+          : undefined,
       semanticHighlight: match.semanticHighlight,
     };
   });
@@ -449,10 +485,13 @@ export const findFriendApi = {
       filters: buildFilters(payload),
     };
 
-    const response = await request<MatchmakingResponse>("/matchmaking/matches", {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
+    const response = await request<MatchmakingResponse>(
+      "/matchmaking/matches",
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      }
+    );
 
     return {
       matches: transformMatches(response, payload),
@@ -494,13 +533,44 @@ export const findFriendApi = {
 
     return [];
   },
+
+  async planHangout(
+    payload: HangoutPlanRequest,
+    accessToken?: string
+  ): Promise<{ plan: HangoutPlan; generatedAt: string }> {
+    const response = await request<{
+      plan: HangoutPlan;
+      generatedAt: string;
+    }>("/matchmaking/hangout-plans", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      headers: accessToken
+        ? {
+            Authorization: `Bearer ${accessToken}`,
+          }
+        : undefined,
+    });
+
+    if (!response?.plan) {
+      throw new MatchmakingApiError(
+        500,
+        "Hangout plan did not include a plan payload."
+      );
+    }
+
+    return {
+      plan: response.plan,
+      generatedAt: response.generatedAt ?? new Date().toISOString(),
+    };
+  },
 };
 
 export { MatchmakingApiError };
 
-export const MATCH_WINDOW_OPTIONS: Array<{ value: MatchWindow; label: string }> =
-  [
-    { value: "NEXT_7_DAYS", label: "Next 7 days" },
-    { value: "NEXT_14_DAYS", label: "Next 14 days" },
-  ];
-
+export const MATCH_WINDOW_OPTIONS: Array<{
+  value: MatchWindow;
+  label: string;
+}> = [
+  { value: "NEXT_7_DAYS", label: "Next 7 days" },
+  { value: "NEXT_14_DAYS", label: "Next 14 days" },
+];
