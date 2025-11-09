@@ -165,6 +165,17 @@ const updateUserById = async (id, attributes = {}) => {
   };
 };
 
+const getUserById = async (id) => {
+  const existing = users.get(id);
+  if (!existing) {
+    const error = new Error(`User ${id} not found`);
+    error.status = 404;
+    return { data: null, error };
+  }
+
+  return buildUserResponse(sanitizeUser(existing));
+};
+
 const sanitizeUser = (user) => {
   if (!user) return null;
   const { password, ...rest } = user;
@@ -192,6 +203,7 @@ module.exports = {
     admin: {
       createUser,
       updateUserById,
+      getUserById,
     },
     signUp,
     signInWithPassword,

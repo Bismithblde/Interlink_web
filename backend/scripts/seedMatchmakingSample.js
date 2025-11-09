@@ -44,6 +44,7 @@ const toProfileRow = (user, idMap) => {
     favorite_spot: user.favoriteSpot,
     vibe_check: user.vibeCheck,
     is_opted_in: true,
+    instagram: user.instagram || null,
   };
 };
 
@@ -116,6 +117,7 @@ const seed = async () => {
           hobbies: user.hobbies,
           interests: user.interests,
           classes: user.classes,
+          instagram: user.instagram,
         },
       });
 

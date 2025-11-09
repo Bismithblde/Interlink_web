@@ -38,6 +38,21 @@ const normalizeAvailability = (entries = []) =>
       ...(entry.color ? { color: entry.color } : {}),
     }));
 
+const sanitizeInstagram = (value) => {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const withoutUrl = trimmed
+    .replace(/^https?:\/\/(www\.)?instagram\.com\//i, "")
+    .replace(/\/+$/, "");
+  const withoutAt =
+    withoutUrl.startsWith("@") && withoutUrl.length > 1
+      ? withoutUrl.slice(1)
+      : withoutUrl;
+  const compact = withoutAt.replace(/\s+/g, "");
+  return compact.length > 0 ? compact : undefined;
+};
+
 const toProfile = (record = {}) => ({
   id: record.id,
   name: record.full_name || record.name,
@@ -52,6 +67,10 @@ const toProfile = (record = {}) => ({
   favoriteSpot: record.favorite_spot || record.favoriteSpot,
   vibeCheck: record.vibe_check || record.vibeCheck,
   availability: normalizeAvailability(record.availability || record.availabilitySlots),
+  instagram:
+    sanitizeInstagram(record.instagram) ||
+    sanitizeInstagram(record.instagram_handle) ||
+    sanitizeInstagram(record.social_instagram),
 });
 
 const fetchFromSampleDataset = async ({ seekerId }) => {
@@ -85,6 +104,7 @@ const fetchFromSupabase = async ({ seekerId }) => {
       favorite_spot,
       vibe_check,
       bio,
+      instagram,
       availability:availability_slots(
         id,
         title,

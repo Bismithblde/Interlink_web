@@ -43,6 +43,22 @@ const coerceArrayOfStrings = (value) => {
   return undefined;
 };
 
+const sanitizeInstagramHandle = (value) => {
+  const raw = coerceOptionalString(value);
+  if (!raw) return undefined;
+
+  const withoutUrl = raw
+    .replace(/^https?:\/\/(www\.)?instagram\.com\//i, "")
+    .replace(/\/+$/, "");
+  const normalized =
+    withoutUrl.startsWith("@") && withoutUrl.length > 1
+      ? withoutUrl.slice(1)
+      : withoutUrl;
+  const cleaned = normalized.replace(/\s+/g, "");
+
+  return cleaned.length > 0 ? cleaned : undefined;
+};
+
 const buildSignupMetadata = (body = {}) => {
   const profile = typeof body.profile === "object" ? body.profile : {};
   const metadata = {
@@ -76,6 +92,10 @@ const buildSignupMetadata = (body = {}) => {
       coerceArrayOfStrings(profile.interests),
     club: coerceOptionalString(body.club) ?? coerceOptionalString(profile.club),
     age: coerceOptionalNumber(body.age) ?? coerceOptionalNumber(profile.age),
+    instagram:
+      sanitizeInstagramHandle(body.instagram) ??
+      sanitizeInstagramHandle(profile.instagram) ??
+      sanitizeInstagramHandle(profile.instagramHandle),
   };
 
   const sanitizedEntries = Object.entries(metadata).filter(
@@ -230,6 +250,7 @@ const allowedMetadataFields = [
   "classes",
   "metadata",
   "connections",
+  "instagram",
 ];
 
 exports.updateProfile = async (req, res) => {
@@ -310,6 +331,11 @@ exports.updateProfile = async (req, res) => {
         ? metadataUpdates.name.trim()
         : "";
     metadataUpdates.name = trimmed || null;
+  }
+
+  if (metadataUpdates.instagram !== undefined) {
+    const sanitized = sanitizeInstagramHandle(metadataUpdates.instagram);
+    metadataUpdates.instagram = sanitized || null;
   }
 
   const hasMetadataUpdates = Object.keys(metadataUpdates).length > 0;
@@ -405,6 +431,7 @@ exports.updateProfile = async (req, res) => {
         favorite_spot: nextUserMetadata.favoriteSpot || null,
         vibe_check: null,
         is_opted_in: true,
+        instagram: nextUserMetadata.instagram || null,
       };
 
       const { error: profileError } = await supabase

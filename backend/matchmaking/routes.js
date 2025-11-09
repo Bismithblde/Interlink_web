@@ -10,6 +10,11 @@ router.get("/health", (_req, res) =>
 router.get("/hobbies", matchController.searchHobbies);
 
 router.post("/matches", matchController.createMatchPlan);
+router.post(
+  "/activity-suggestions",
+  matchController.suggestActivities
+);
+router.post("/hangout-plans", matchController.planHangout);
 
 module.exports = router;
 

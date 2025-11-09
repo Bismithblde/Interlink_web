@@ -41,6 +41,7 @@ const pickCandidateProfile = (candidate) => ({
   funFact: candidate.funFact,
   favoriteSpot: candidate.favoriteSpot,
   vibeCheck: candidate.vibeCheck,
+  instagram: candidate.instagram,
 });
 
 const computeSharedInterests = (seekerInterests = [], candidates) => {
@@ -152,7 +153,9 @@ const computePairMatches = ({
           candidate.id
         } overlapMinutes=${overlapMinutes} sharedInterests=${
           sharedInterests.length
-        } sharedHobbies=${(affinity.sharedHobbies || []).length}`
+        } sharedHobbies=${(affinity.sharedHobbies || []).length} similarity=${
+          affinity.semanticSimilarity ?? 0
+        }`
       );
 
       const compatibility = computeCompatibilityScore({
@@ -173,15 +176,17 @@ const computePairMatches = ({
         compatibilityScore: compatibility.score,
         compatibilityBreakdown: compatibility.breakdown,
         compatibilitySummary: buildCompatibilitySummary({
-          clusterLabel,
+          scheduleMinutes: overlapMinutes,
+          semanticHighlight: affinity.semanticHighlight,
           sharedHobbies: affinity.sharedHobbies,
           sharedInterests,
-          scheduleMinutes: overlapMinutes,
         }),
         clusterId: affinity.clusterId,
         clusterLabel,
         traitHighlights: affinity.traitHighlights || [],
         candidateScheduleSummary: summarizeSchedule(candidateSchedule),
+        semanticSimilarity: affinity.semanticSimilarity,
+        semanticHighlight: affinity.semanticHighlight,
       };
     })
     .filter(Boolean);
@@ -261,6 +266,8 @@ const computeGroupMatches = ({
             summary: summarizeSchedule(combo[idx].schedule),
           })
         ),
+        semanticSimilarity: compatibility.breakdown.affinity,
+        semanticHighlight: compatibility.semanticHighlight,
       };
     })
     .filter(Boolean);
@@ -293,6 +300,11 @@ const mergeSeekerProfile = (incoming = {}, persisted = {}) => ({
   classes: mergeArrays(persisted.classes, incoming.classes),
   major: incoming.major || persisted.major,
   graduationYear: incoming.graduationYear || persisted.graduationYear,
+  instagram: incoming.instagram || persisted.instagram,
+  bio: incoming.bio || persisted.bio,
+  funFact: incoming.funFact || persisted.funFact,
+  favoriteSpot: incoming.favoriteSpot || persisted.favoriteSpot,
+  vibeCheck: incoming.vibeCheck || persisted.vibeCheck,
 });
 
 const findMatches = async ({ seeker, availability, mode, filters = {} }) => {
@@ -398,11 +410,17 @@ const findMatches = async ({ seeker, availability, mode, filters = {} }) => {
 
   let emptyReason = null;
 
-  const affinityContext = buildAffinityContext({
+  const affinityContext = await buildAffinityContext({
     seeker: mergedSeeker,
     candidates: candidatesToEvaluate,
-    filters,
   });
+
+  debugLog.push(
+    `[matchService] affinity strategy=${affinityContext.metadata.similarityStrategy} assignments=${affinityContext.metadata.assignments}`.replace(
+      /\s+/g,
+      " "
+    )
+  );
 
   if (normalizedMode === "one-on-three") {
     if (candidatesToEvaluate.length < 3) {

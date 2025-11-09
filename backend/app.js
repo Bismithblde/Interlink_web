@@ -67,6 +67,12 @@ const createApp = () => {
   const matchRoutes = require("./matchmaking/routes");
   app.use("/matchmaking", matchRoutes);
 
+  const connectionRoutes = require("./connections/routes");
+  app.use("/connections", connectionRoutes);
+
+  const inboxRoutes = require("./inbox/routes");
+  app.use("/inbox", inboxRoutes);
+
   app.get("/", (_req, res) => {
     res.send("Hello from InterLink Backend!");
   });
