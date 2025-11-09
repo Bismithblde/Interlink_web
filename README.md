@@ -1,6 +1,6 @@
 ## Interlink – Hackathon README
 
-Welcome to **Interlink**, our commuter-student matchmaking and hangout-planning prototype built during the _[Hackathon Name]_ sprint. Interlink helps students find like-minded peers, align schedules in minutes, and spin up campus meetups—powered by smart data hygiene, AI-assisted planning, and a polished end-to-end experience.
+Welcome to **Interlink**, our commuter-student matchmaking and hangout-planning prototype built during the Hack SBU sprint. Interlink helps students find like-minded peers, align schedules in minutes, and spin up campus meetups—powered by smart data hygiene, AI-assisted planning, and a polished end-to-end experience.
 
 ---
 
