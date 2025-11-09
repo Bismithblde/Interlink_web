@@ -5,15 +5,9 @@ import AuthHeading from "../components/AuthHeading";
 import AuthInput from "../components/AuthInput";
 import AuthLayout from "../components/AuthLayout";
 import NotebookCanvas from "../components/NotebookCanvas";
-import type {
-  AuthCredentials,
-  SignInResponse,
-  SupabaseProfileResponse,
-} from "../types/user";
+import type { AuthCredentials, SupabaseProfileResponse } from "../types/user";
 import { authApi, AuthApiError } from "../services/authApi";
 import { useAuth } from "../context/AuthContext";
-
-const STORAGE_KEY = "interlink.auth.session";
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -35,21 +29,6 @@ const LoginPage = () => {
         [field]: value,
       }));
     };
-
-  const persistSession = (
-    authResponse: SignInResponse,
-    profile: SupabaseProfileResponse["user"]
-  ) => {
-    if (typeof window === "undefined") return;
-
-    const storagePayload = {
-      user: profile ?? authResponse.user ?? null,
-      session: authResponse.session ?? null,
-      storedAt: new Date().toISOString(),
-    };
-
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(storagePayload));
-  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -82,8 +61,6 @@ const LoginPage = () => {
         }
       }
 
-      persistSession(authResponse, profile ?? null);
-
       const resolvedUser =
         profile ??
         authResponse.user ??
@@ -93,7 +70,7 @@ const LoginPage = () => {
           : null);
 
       if (resolvedUser) {
-        login(resolvedUser);
+        login(resolvedUser, authResponse.session ?? null);
       } else {
         console.warn("[LoginPage] No user information returned from sign-in.");
       }
@@ -119,7 +96,7 @@ const LoginPage = () => {
 
   return (
     <AuthLayout>
-      <div className="flex w-full flex-col items-center gap-10 px-2 text-center">
+      <div className="flex w-full flex-col items-center gap-10 px-2 text-center text-slate-100">
         <div className="notebook-scene w-full max-w-xl">
           <NotebookCanvas as="form" onSubmit={handleSubmit}>
             <AuthHeading
@@ -128,7 +105,7 @@ const LoginPage = () => {
               description="Welcome back. Enter your credentials to continue exploring Interlink."
             />
 
-            <div className="mt-4 grid w-full gap-6 text-left text-sm font-medium text-slate-600">
+            <div className="mt-4 grid w-full gap-6 text-left text-sm font-medium text-slate-200">
               <AuthInput
                 id="email"
                 label="Email"
@@ -153,19 +130,19 @@ const LoginPage = () => {
 
             <button
               type="submit"
-              className="mt-6 inline-flex items-center rounded-full bg-sky-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-500/30 transition hover:bg-sky-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 disabled:cursor-not-allowed disabled:bg-sky-300"
+              className="mt-6 inline-flex items-center rounded-full bg-sky-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-900/40 transition hover:bg-sky-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400 disabled:cursor-not-allowed disabled:bg-sky-800/60"
               disabled={isSubmitting}
             >
               {isSubmitting ? "Signing you in…" : "Log In"}
             </button>
 
             {errorMessage && (
-              <p className="text-sm font-medium text-red-600" role="alert">
+              <p className="text-sm font-medium text-rose-300" role="alert">
                 {errorMessage}
               </p>
             )}
             {successMessage && (
-              <p className="text-sm font-medium text-emerald-600" role="status">
+              <p className="text-sm font-medium text-emerald-300" role="status">
                 {successMessage}
               </p>
             )}
@@ -173,11 +150,11 @@ const LoginPage = () => {
             <p className="text-xs font-medium uppercase tracking-[0.4em] text-sky-200/80">
               Page 01
             </p>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-300">
               Need an account?{" "}
               <Link
                 to="/signup"
-                className="font-semibold text-sky-500 underline decoration-dotted underline-offset-4 hover:text-sky-400"
+                className="font-semibold text-sky-300 underline decoration-dotted underline-offset-4 hover:text-sky-200"
               >
                 Create one here
               </Link>

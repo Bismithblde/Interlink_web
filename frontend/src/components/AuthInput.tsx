@@ -12,7 +12,7 @@ const AuthInput = ({ label, id, className = "", ...rest }: AuthInputProps) => (
     </span>
     <input
       id={id}
-      className={`flex-1 rounded-full border border-dashed border-slate-300 bg-white/90 px-6 py-3 text-slate-700 shadow-inner shadow-white/40 outline-none transition hover:border-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-300/60 ${className}`}
+      className={`flex-1 rounded-full border border-dashed border-slate-600 bg-slate-900/60 px-6 py-3 text-slate-100 shadow-inner shadow-slate-950/40 outline-none transition hover:border-slate-500 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/40 ${className}`}
       {...rest}
     />
   </label>

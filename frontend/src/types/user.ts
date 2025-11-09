@@ -7,6 +7,67 @@ export interface UserConnection {
   lastInteractedAt?: string;
 }
 
+export type FriendRequestStatus =
+  | "pending"
+  | "accepted"
+  | "declined"
+  | "cancelled";
+
+export interface FriendProfileSnapshot {
+  id: string;
+  email?: string | null;
+  name?: string | null;
+  major?: string | null;
+  interests?: string[];
+  hobbies?: string[];
+  favoriteSpot?: string | null;
+  vibeCheck?: string | null;
+  instagram?: string | null;
+  avatarUrl?: string | null;
+}
+
+export interface FriendEdge {
+  id: string;
+  since?: string | null;
+  requestId?: string | null;
+  profile: FriendProfileSnapshot;
+}
+
+export interface FriendRequestSummary {
+  id: string;
+  requesterId: string;
+  recipientId: string;
+  status: FriendRequestStatus;
+  message?: string | null;
+  createdAt?: string | null;
+  respondedAt?: string | null;
+  requesterProfile?: FriendProfileSnapshot;
+  recipientProfile?: FriendProfileSnapshot;
+}
+
+export interface FriendGraph {
+  userId: string;
+  friends: FriendEdge[];
+  incomingRequests: FriendRequestSummary[];
+  outgoingRequests: FriendRequestSummary[];
+  counts: {
+    friends: number;
+    incoming: number;
+    outgoing: number;
+  };
+}
+
+export interface FriendInbox {
+  userId: string;
+  incomingRequests: FriendRequestSummary[];
+  outgoingRequests: FriendRequestSummary[];
+  counts: {
+    incoming: number;
+    outgoing: number;
+  };
+  fetchedAt: string;
+}
+
 export interface UserProfile {
   id?: string;
   name: string;
@@ -24,6 +85,9 @@ export interface UserProfile {
   createdAt?: string;
   updatedAt?: string;
   metadata?: Record<string, unknown>;
+  instagram?: string;
+  friends?: FriendEdge[];
+  friendGraph?: FriendGraph;
 }
 
 export type AuthCredentials = {
@@ -83,6 +147,7 @@ export interface UpdateProfilePayload
       | "bannerUrl"
       | "hobbies"
       | "metadata"
+      | "instagram"
     >
   > {
   connections?: UserConnection[];

@@ -1,0 +1,58 @@
+.schedule-shooting-stars {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.schedule-shooting-stars--screen {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+}
+
+.schedule-shooting-stars .shooting-star {
+  position: absolute;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(15, 23, 42, 0), rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0));
+  border-radius: 9999px;
+  opacity: 0;
+  animation-name: schedule-shooting-star-move;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+
+.schedule-shooting-stars .shooting-star::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 9999px;
+  box-shadow:
+    0 0 8px rgba(255, 255, 255, 0.75),
+    0 0 18px rgba(148, 163, 184, 0.55);
+}
+
+@keyframes schedule-shooting-star-move {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) rotate(45deg);
+  }
+  6% {
+    opacity: 1;
+  }
+  24% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(320px, 320px, 0) rotate(45deg);
+  }
+}
+
