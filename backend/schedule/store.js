@@ -209,6 +209,7 @@ const setSlotsInSupabase = async (userId, slots) => {
   }
 
   if (!slots.length) {
+    await bumpProfileVersion(userId);
     return [];
   }
 
@@ -224,7 +225,20 @@ const setSlotsInSupabase = async (userId, slots) => {
     throw error;
   }
 
+  await bumpProfileVersion(userId);
   return (insertResult.data || []).map(toApiSlot);
+};
+
+/** Bump match_profiles.updated_at so profile versioning invalidates compatibility cache. */
+const bumpProfileVersion = async (userId) => {
+  if (!userId || !isSupabaseConfigured) return;
+  const { error } = await supabase
+    .from("match_profiles")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", userId);
+  if (error) {
+    console.warn("[scheduleStore] bumpProfileVersion failed", error.message);
+  }
 };
 
 const clearSlotsInSupabase = async (userId) => {
@@ -237,6 +251,8 @@ const clearSlotsInSupabase = async (userId) => {
     error.status = error.status || 500;
     throw error;
   }
+
+  await bumpProfileVersion(userId);
 };
 
 if (!isSupabaseConfigured) {
