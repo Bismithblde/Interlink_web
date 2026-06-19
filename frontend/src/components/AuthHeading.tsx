@@ -5,17 +5,19 @@ type AuthHeadingProps = {
 };
 
 const AuthHeading = ({ eyebrow, title, description }: AuthHeadingProps) => (
-  <header className="flex flex-col items-center gap-3 text-center">
+  <header className="flex flex-col gap-3 text-left">
     {eyebrow ? (
-      <span className="text-xs font-semibold uppercase tracking-[0.5em] text-sky-300">
+      <span className="text-sm font-medium text-zinc-400">
         {eyebrow}
       </span>
     ) : null}
-    <h1 className="text-4xl font-semibold tracking-tight text-slate-100">
+    <h1 className="text-3xl font-semibold tracking-[-0.02em] text-zinc-50 sm:text-4xl">
       {title}
     </h1>
     {description ? (
-      <p className="max-w-lg text-sm text-slate-300">{description}</p>
+      <p className="max-w-lg text-base leading-7 text-zinc-400">
+        {description}
+      </p>
     ) : null}
   </header>
 );

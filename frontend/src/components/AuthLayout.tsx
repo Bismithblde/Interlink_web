@@ -12,7 +12,7 @@ const AuthLayout = ({
   contentClassName,
 }: AuthLayoutProps) => {
   const containerClassNames = [
-    "relative flex min-h-screen flex-col items-center overflow-hidden bg-gradient-to-b from-slate-950 via-slate-900/95 to-slate-950 px-4 py-12 pb-24 text-slate-100",
+    "relative flex min-h-screen flex-col items-center overflow-hidden bg-[#0a0a0a] px-4 py-12 pb-24 text-zinc-50",
     alignTop ? "justify-start" : "justify-center",
   ]
     .filter(Boolean)
@@ -27,10 +27,10 @@ const AuthLayout = ({
 
   return (
     <div className={containerClassNames}>
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute right-[-12%] top-[-18%] h-72 w-72 rounded-full bg-sky-500/30 blur-3xl" />
-        <div className="absolute bottom-[-18%] left-[-12%] h-96 w-96 rounded-full bg-indigo-600/25 blur-3xl" />
-      </div>
+      <div
+        className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.055)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.055)_1px,transparent_1px)] bg-[size:32px_32px]"
+        aria-hidden="true"
+      />
       <div className={contentClassNames}>{children}</div>
     </div>
   );
