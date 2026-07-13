@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import {
   CalendarDays,
   LayoutDashboard,
@@ -29,6 +29,10 @@ const TopNav = ({
   onLogout,
   accessToken = null,
 }: TopNavProps) => {
+  const location = useLocation();
+  const isLandingPage = !isAuthenticated && location.pathname === "/";
+  const isMemberHome = isAuthenticated && location.pathname === "/";
+
   const navLinkClassName = ({ isActive }: { isActive: boolean }) =>
     [
       "inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium transition duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white active:scale-[0.98]",
@@ -99,6 +103,77 @@ const TopNav = ({
     }
     void loadInbox();
   }, [isAuthenticated, accessToken, loadInbox]);
+
+  if (isMemberHome) {
+    return (
+      <header className="absolute inset-x-0 top-0 z-40 text-[#171817]">
+        <div className="mx-auto flex h-24 w-full max-w-[96rem] items-center justify-between gap-5 px-5 sm:px-8 lg:px-10">
+          <Link
+            to="/"
+            className="landing-display rounded-sm text-[2rem] leading-none tracking-[-0.05em] transition-opacity hover:opacity-65 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#171817]"
+          >
+            Interlink
+          </Link>
+          <nav className="flex items-center gap-2 text-sm font-medium sm:gap-5" aria-label="Dashboard navigation">
+            <Link className="hidden transition-opacity hover:opacity-55 md:inline" to="/schedule">
+              Schedule
+            </Link>
+            <Link className="hidden transition-opacity hover:opacity-55 lg:inline" to="/friends">
+              Connections
+            </Link>
+            <Link className="hidden transition-opacity hover:opacity-55 lg:inline" to="/hangout-planner">
+              Plan a hangout
+            </Link>
+            <Link className="hidden transition-opacity hover:opacity-55 sm:inline" to="/profile">
+              Profile
+            </Link>
+            <button
+              type="button"
+              onClick={onLogout}
+              className="hidden transition-opacity hover:opacity-55 xl:inline"
+            >
+              Sign out
+            </button>
+            <Link
+              to="/find-friends"
+              className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[#171817] px-5 text-sm font-semibold text-[#f2eee4] shadow-[0_18px_45px_-24px_rgba(23,24,23,0.75)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#292a27] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#171817] active:translate-y-px"
+            >
+              Find a match
+            </Link>
+          </nav>
+        </div>
+      </header>
+    );
+  }
+
+  if (isLandingPage) {
+    return (
+      <header className="absolute inset-x-0 top-0 z-40 text-[#171817]">
+        <div className="mx-auto flex h-24 w-full max-w-[96rem] items-center justify-between gap-6 px-5 sm:px-8 lg:px-10">
+          <Link
+            to="/"
+            className="landing-display rounded-sm text-[2rem] leading-none tracking-[-0.05em] transition-opacity hover:opacity-65 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#171817]"
+          >
+            Interlink
+          </Link>
+          <nav className="flex items-center gap-3 sm:gap-7" aria-label="Landing navigation">
+            <a
+              href="#how-it-works"
+              className="hidden rounded-sm text-sm font-medium transition-opacity hover:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#171817] sm:inline"
+            >
+              How it works
+            </a>
+            <Link
+              to="/signup"
+              className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[#171817] px-5 text-sm font-semibold text-[#f2eee4] shadow-[0_18px_45px_-24px_rgba(23,24,23,0.75)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#292a27] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#171817] active:translate-y-px"
+            >
+              Find your people
+            </Link>
+          </nav>
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-[#09090b] shadow-sm shadow-black/30">
