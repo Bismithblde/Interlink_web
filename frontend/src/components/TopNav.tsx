@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import {
   CalendarDays,
   LayoutDashboard,
   Link2,
   LogIn,
+  Menu,
   Sparkles,
   UserCircle2,
   UserPlus,
@@ -28,12 +29,18 @@ const TopNav = ({
   onLogout,
   accessToken = null,
 }: TopNavProps) => {
+  const location = useLocation();
+  const isLandingPage = !isAuthenticated && location.pathname === "/";
+  const isMemberHome = isAuthenticated && location.pathname === "/";
+  const isAuthEntryPage =
+    !isAuthenticated && ["/login", "/signup"].includes(location.pathname);
+
   const navLinkClassName = ({ isActive }: { isActive: boolean }) =>
     [
-      "inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition",
+      "inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium transition duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white active:scale-[0.98]",
       isActive
-        ? "bg-sky-500/20 text-white shadow-lg shadow-sky-900/40"
-        : "text-slate-300 hover:bg-slate-800/60 hover:text-white",
+        ? "bg-zinc-800 text-zinc-50 shadow-sm shadow-black/20"
+        : "text-zinc-400 hover:bg-white/8 hover:text-zinc-50",
     ].join(" ");
 
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
@@ -99,43 +106,152 @@ const TopNav = ({
     void loadInbox();
   }, [isAuthenticated, accessToken, loadInbox]);
 
+  if (isMemberHome) {
+    return (
+      <header className="match-member-nav">
+        <div className="match-member-nav__inner">
+          <Link
+            to="/"
+            className="match-member-nav__brand landing-display"
+          >
+            Interlink
+          </Link>
+          <nav className="match-member-nav__links" aria-label="Dashboard navigation">
+            <Link to="/schedule">
+              Schedule
+            </Link>
+            <Link to="/friends">
+              Connections
+            </Link>
+            <button
+              type="button"
+              onClick={onLogout}
+              className="match-member-nav__signout"
+            >
+              Sign out
+            </button>
+            <Link
+              to="/profile"
+              className="match-member-nav__profile"
+              aria-label="Open profile"
+            >
+              <UserCircle2 aria-hidden="true" />
+            </Link>
+          </nav>
+        </div>
+      </header>
+    );
+  }
+
+  if (isLandingPage) {
+    return (
+      <header className="absolute inset-x-0 top-0 z-40 text-[#171817]">
+        <div className="mx-auto flex h-24 w-full max-w-[96rem] items-center justify-between gap-6 px-5 sm:px-8 lg:px-10">
+          <Link
+            to="/"
+            className="landing-display rounded-sm text-[2rem] leading-none tracking-[-0.05em] transition-opacity hover:opacity-65 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#171817]"
+          >
+            Interlink
+          </Link>
+          <nav className="flex items-center gap-3 sm:gap-7" aria-label="Landing navigation">
+            <a
+              href="#how-it-works"
+              className="hidden rounded-sm text-sm font-medium transition-opacity hover:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#171817] sm:inline"
+            >
+              How it works
+            </a>
+            <Link
+              to="/signup"
+              className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[#171817] px-5 text-sm font-semibold text-[#f2eee4] shadow-[0_18px_45px_-24px_rgba(23,24,23,0.75)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#292a27] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#171817] active:translate-y-px"
+            >
+              Find your people
+            </Link>
+          </nav>
+        </div>
+      </header>
+    );
+  }
+
+  if (isAuthEntryPage) {
+    const isSignupPage = location.pathname === "/signup";
+
+    return (
+      <header className="absolute inset-x-0 top-0 z-40 text-[#f7f3eb]">
+        <div className="mx-auto flex h-24 w-full max-w-[96rem] items-center justify-between px-5 sm:px-8 lg:px-10">
+          <Link
+            to="/"
+            className="landing-display rounded-sm text-[2rem] leading-none tracking-[-0.05em] transition-opacity hover:opacity-65 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
+          >
+            Interlink
+          </Link>
+          <Link
+            to={isSignupPage ? "/login" : "/signup"}
+            className="rounded-sm text-sm font-medium transition-opacity hover:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
+          >
+            {isSignupPage ? "Log in" : "Create account"}
+          </Link>
+        </div>
+      </header>
+    );
+  }
+
   return (
-    <header className="relative border-b border-slate-800/70 bg-gradient-to-br from-slate-950 via-slate-900/95 to-slate-950 shadow-lg shadow-slate-950/40 backdrop-blur">
-      <div className="relative mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
+    <header className="sticky top-0 z-40 border-b border-white/10 bg-[#09090b] shadow-sm shadow-black/30">
+      <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <Link
           to="/"
-          className="inline-flex items-center gap-3 text-lg font-semibold text-slate-100"
+          className="inline-flex items-center gap-2.5 rounded-lg text-base font-semibold tracking-[-0.01em] text-zinc-50 transition hover:text-zinc-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
         >
-          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-sky-600 via-sky-500 to-cyan-400 text-white shadow-md shadow-cyan-500/40">
-            <Link2 className="h-5 w-5" />
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-zinc-900 text-zinc-50 shadow-sm shadow-black/20">
+            <Link2 className="h-4 w-4" />
           </span>
-          <span className="hidden sm:inline-block">Interlink</span>
+          <span className="hidden sm:inline">Interlink</span>
         </Link>
 
-        <nav className="flex items-center gap-2 text-sm font-medium text-slate-300 sm:gap-3">
-          <NavLink to="/" className={navLinkClassName}>
+        <nav className="flex max-w-[78vw] items-center gap-1 overflow-x-auto rounded-xl border border-white/10 bg-zinc-950 p-1 shadow-sm shadow-black/20">
+          <NavLink to="/" className={navLinkClassName} aria-label="Dashboard">
             <LayoutDashboard className="h-4 w-4" />
             <span className="hidden sm:inline">Dashboard</span>
           </NavLink>
           {isAuthenticated ? (
             <>
-              <NavLink to="/find-friends" className={navLinkClassName}>
+              <NavLink
+                to="/find-friends"
+                className={navLinkClassName}
+                aria-label="Matches"
+              >
                 <UsersRound className="h-4 w-4" />
                 <span className="hidden sm:inline">Matches</span>
               </NavLink>
-              <NavLink to="/schedule" className={navLinkClassName}>
+              <NavLink
+                to="/schedule"
+                className={navLinkClassName}
+                aria-label="Schedule"
+              >
                 <CalendarDays className="h-4 w-4" />
                 <span className="hidden sm:inline">Schedule</span>
               </NavLink>
-              <NavLink to="/profile" className={navLinkClassName}>
+              <NavLink
+                to="/profile"
+                className={navLinkClassName}
+                aria-label="Profile"
+              >
                 <UserCircle2 className="h-4 w-4" />
                 <span className="hidden sm:inline">Profile</span>
               </NavLink>
-              <NavLink to="/friends" className={navLinkClassName}>
+              <NavLink
+                to="/friends"
+                className={navLinkClassName}
+                aria-label="Friends"
+              >
                 <UsersRound className="h-4 w-4" />
                 <span className="hidden sm:inline">Friends</span>
               </NavLink>
-              <NavLink to="/hangout-planner" className={navLinkClassName}>
+              <NavLink
+                to="/hangout-planner"
+                className={navLinkClassName}
+                aria-label="Hangout planner"
+              >
                 <Sparkles className="h-4 w-4" />
                 <span className="hidden sm:inline">Hangout</span>
               </NavLink>
@@ -147,42 +263,45 @@ const TopNav = ({
                   padding={8}
                   onClickOutside={handleClosePopover}
                   content={
-                    <div className="w-64 max-w-[85vw] rounded-2xl border border-slate-800/70 bg-slate-950/95 p-4 text-slate-100 shadow-xl shadow-slate-950/40">
+                    <div className="w-72 max-w-[85vw] rounded-2xl border border-white/10 bg-zinc-950 p-4 text-zinc-50 shadow-xl shadow-black/40">
                       <header className="mb-3 flex items-center justify-between">
-                        <span className="text-sm font-semibold text-slate-100">
+                        <span className="text-sm font-semibold">
                           Connection inbox
                         </span>
                         <button
                           type="button"
                           onClick={handleClosePopover}
-                          className="rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400 transition hover:bg-slate-800/80 hover:text-white"
+                          className="rounded-lg px-2 py-1 text-xs font-medium text-zinc-400 transition hover:bg-white/8 hover:text-zinc-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                         >
                           Close
                         </button>
                       </header>
                       {isInboxLoading ? (
-                        <p className="text-xs text-slate-300">Loading inbox…</p>
+                        <div className="space-y-2" aria-label="Loading inbox">
+                          <span className="block h-9 rounded-xl bg-white/10" />
+                          <span className="block h-9 rounded-xl bg-white/8" />
+                        </div>
                       ) : inboxError ? (
-                        <p className="text-xs text-rose-300">{inboxError}</p>
+                        <p className="text-xs text-red-300">{inboxError}</p>
                       ) : !inboxData ? (
-                        <p className="text-xs text-slate-300">
+                        <p className="text-xs text-zinc-400">
                           Sign in to view your inbox.
                         </p>
                       ) : (
                         <div className="space-y-2 text-xs">
-                          <div className="flex items-center justify-between rounded-xl border border-slate-800/60 bg-slate-900/60 px-3 py-2">
-                            <span className="font-semibold uppercase tracking-[0.3em] text-slate-400">
+                          <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
+                            <span className="font-medium text-zinc-400">
                               Incoming
                             </span>
-                            <span className="text-slate-200">
+                            <span className="font-semibold text-zinc-50">
                               {inboxData.incomingRequests.length}
                             </span>
                           </div>
-                          <div className="flex items-center justify-between rounded-xl border border-slate-800/60 bg-slate-900/60 px-3 py-2">
-                            <span className="font-semibold uppercase tracking-[0.3em] text-slate-400">
+                          <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
+                            <span className="font-medium text-zinc-400">
                               Outgoing
                             </span>
-                            <span className="text-slate-200">
+                            <span className="font-semibold text-zinc-50">
                               {inboxData.outgoingRequests.length}
                             </span>
                           </div>
@@ -195,29 +314,34 @@ const TopNav = ({
                     type="button"
                     ref={inboxButtonRef}
                     onClick={handleInboxButtonClick}
-                    className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold text-slate-300 transition hover:bg-slate-800/70 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+                    className="inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium text-zinc-400 transition duration-200 hover:bg-white/8 hover:text-zinc-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white active:scale-[0.98]"
                   >
-                    Inbox
+                    <Menu className="h-4 w-4 sm:hidden" />
+                    <span className="hidden sm:inline">Inbox</span>
                   </button>
                 </Popover>
               </div>
               <button
                 type="button"
                 onClick={onLogout}
-                className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold text-slate-300 transition hover:bg-rose-500/20 hover:text-rose-300"
+                className="inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium text-zinc-400 transition duration-200 hover:bg-red-500/10 hover:text-red-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-300 active:scale-[0.98]"
               >
                 Sign out
               </button>
             </>
           ) : (
             <>
-              <NavLink to="/login" className={navLinkClassName}>
+              <NavLink to="/login" className={navLinkClassName} aria-label="Log in">
                 <LogIn className="h-4 w-4" />
                 <span className="hidden sm:inline">Log in</span>
               </NavLink>
-              <NavLink to="/signup" className={navLinkClassName}>
+              <NavLink
+                to="/signup"
+                className={navLinkClassName}
+                aria-label="Create account"
+              >
                 <UserPlus className="h-4 w-4" />
-                <span className="hidden sm:inline">Create account</span>
+                <span className="hidden sm:inline">Sign up</span>
               </NavLink>
             </>
           )}

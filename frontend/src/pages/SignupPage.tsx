@@ -1,13 +1,46 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import type { FormEvent } from "react";
-import AuthHeading from "../components/AuthHeading";
-import AuthInput from "../components/AuthInput";
-import AuthLayout from "../components/AuthLayout";
-import NotebookCanvas from "../components/NotebookCanvas";
+import type { FormEvent, InputHTMLAttributes } from "react";
+import { ArrowRight, Eye, EyeOff } from "lucide-react";
 import type { SignupPayload } from "../types/user";
 import { authApi, AuthApiError } from "../services/authApi";
 import { useAuth } from "../context/AuthContext";
+
+type SignupFieldProps = {
+  id: string;
+  label: string;
+  canRevealPassword?: boolean;
+} & InputHTMLAttributes<HTMLInputElement>;
+
+const SignupField = ({
+  id,
+  label,
+  canRevealPassword = false,
+  type = "text",
+  ...inputProps
+}: SignupFieldProps) => {
+  const [isVisible, setIsVisible] = useState(false);
+  const resolvedType = canRevealPassword && isVisible ? "text" : type;
+
+  return (
+    <label className="signup-field" htmlFor={id}>
+      <span>{label}</span>
+      <span className="signup-field__control">
+        <input id={id} type={resolvedType} {...inputProps} />
+        {canRevealPassword ? (
+          <button
+            type="button"
+            className="signup-field__reveal"
+            aria-label={isVisible ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+            onClick={() => setIsVisible((current) => !current)}
+          >
+            {isVisible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+          </button>
+        ) : null}
+      </span>
+    </label>
+  );
+};
 
 const SignupPage = () => {
   const navigate = useNavigate();
@@ -16,6 +49,7 @@ const SignupPage = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -29,6 +63,11 @@ const SignupPage = () => {
 
     if (password !== confirmPassword) {
       setErrorMessage("Passwords must match.");
+      return;
+    }
+
+    if (!hasAcceptedTerms) {
+      setErrorMessage("Please agree to the Terms and Privacy Policy.");
       return;
     }
 
@@ -79,89 +118,111 @@ const SignupPage = () => {
   };
 
   return (
-    <AuthLayout>
-      <div className="flex w-full flex-col items-center gap-10 px-2 text-center text-slate-100">
-        <div className="notebook-scene w-full max-w-xl">
-          <NotebookCanvas as="form" onSubmit={handleSubmit}>
-            <AuthHeading
-              title="Signup"
-              eyebrow="Interlink Notebook"
-              description="Join us by filling out the fields below. We’ll take it from here."
-            />
+    <div className="signup-page">
+      <img
+        className="signup-page__backdrop"
+        src="/assets/interlink-campus-dusk.png"
+        alt=""
+        aria-hidden="true"
+      />
+      <div className="signup-page__veil" aria-hidden="true" />
 
-            <div className="mt-4 grid w-full gap-6 text-left text-sm font-medium text-slate-200">
-              <AuthInput
-                id="fullName"
-                label="Full Name"
-                autoComplete="name"
-                placeholder="Avery Interlink"
-                value={fullName}
-                onChange={(event) => setFullName(event.target.value)}
-                required
-              />
-              <AuthInput
-                id="email"
-                label="Email"
-                type="email"
-                autoComplete="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-              />
-              <AuthInput
-                id="password"
-                label="Password"
-                type="password"
-                autoComplete="new-password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
-              <AuthInput
-                id="confirmPassword"
-                label="Confirm"
-                type="password"
-                autoComplete="new-password"
-                placeholder="Repeat password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="mt-6 inline-flex items-center rounded-full bg-sky-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-900/40 transition hover:bg-sky-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400 disabled:cursor-not-allowed disabled:bg-sky-800/60"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? "Creating account…" : "Create Account"}
-            </button>
-
-            {errorMessage && (
-              <p className="text-sm font-medium text-rose-300" role="alert">
-                {errorMessage}
-              </p>
-            )}
-
-            <p className="text-xs font-medium uppercase tracking-[0.4em] text-sky-200/80">
-              Page 02
-            </p>
-            <p className="text-xs text-slate-300">
-              Already registered?{" "}
-              <Link
-                to="/login"
-                className="font-semibold text-sky-300 underline decoration-dotted underline-offset-4 hover:text-sky-200"
-              >
-                Return to login
-              </Link>
-              .
-            </p>
-          </NotebookCanvas>
+      <section className="signup-page__content" aria-labelledby="signup-title">
+        <div className="signup-page__intro">
+          <h1 id="signup-title" className="landing-display">
+            Create your Interlink account
+          </h1>
+          <p>
+            Start with the basics. Your schedule, interests, and campus context
+            come next.
+          </p>
         </div>
-      </div>
-    </AuthLayout>
+
+        <form className="signup-form" onSubmit={handleSubmit} noValidate>
+          <div className="signup-tabs" role="tablist" aria-label="Signup progress">
+            <button type="button" role="tab" aria-selected="true" className="is-active">
+              Account
+            </button>
+            <button type="button" role="tab" aria-selected="false" disabled>
+              Profile
+            </button>
+          </div>
+
+          <div className="signup-form__fields">
+            <SignupField
+              id="fullName"
+              label="Full name"
+              autoComplete="name"
+              placeholder="Avery Morgan"
+              value={fullName}
+              onChange={(event) => setFullName(event.target.value)}
+              required
+            />
+            <SignupField
+              id="email"
+              label="Email"
+              type="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              required
+            />
+            <SignupField
+              id="password"
+              label="Password"
+              type="password"
+              autoComplete="new-password"
+              placeholder="Create a password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              canRevealPassword
+              required
+            />
+            <SignupField
+              id="confirmPassword"
+              label="Confirm password"
+              type="password"
+              autoComplete="new-password"
+              placeholder="Repeat your password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              canRevealPassword
+              required
+            />
+          </div>
+
+          {errorMessage ? (
+            <p className="signup-form__error" role="alert">
+              {errorMessage}
+            </p>
+          ) : null}
+
+          <div className="signup-form__footer">
+            <label className="signup-terms">
+              <input
+                type="checkbox"
+                checked={hasAcceptedTerms}
+                onChange={(event) => setHasAcceptedTerms(event.target.checked)}
+              />
+              <span>
+                I agree to the <span className="signup-terms__legal">Terms</span> and{" "}
+                <span className="signup-terms__legal">Privacy Policy</span>
+              </span>
+            </label>
+
+            <button type="submit" className="signup-submit" disabled={isSubmitting}>
+              {isSubmitting ? "Creating account..." : "Create account"}
+              <ArrowRight aria-hidden="true" />
+            </button>
+          </div>
+        </form>
+
+        <p className="signup-page__login">
+          Already have an account? <Link to="/login">Log in</Link>
+        </p>
+      </section>
+    </div>
   );
 };
 

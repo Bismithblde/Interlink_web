@@ -12,11 +12,16 @@ const {
   computeGroupCompatibility,
   buildCompatibilitySummary,
 } = require("../utils/affinityUtils");
+const { getProfileVersions } = require("./profileVersionService");
+const compatibilityCache = require("./compatibilityCache");
 
 const SUPPORTED_MODES = {
   "one-on-one": "one-on-one",
   "1-on-1": "one-on-one",
   one_on_one: "one-on-one",
+  "one-on-two": "one-on-two",
+  "1-on-2": "one-on-two",
+  one_on_two: "one-on-two",
   "one-on-three": "one-on-three",
   "1-on-3": "one-on-three",
   one_on_three: "one-on-three",
@@ -410,6 +415,36 @@ const findMatches = async ({ seeker, availability, mode, filters = {} }) => {
 
   let emptyReason = null;
 
+  const seekerId = mergedSeeker?.id || null;
+  let profileVersions = new Map();
+  let validCacheEntries = [];
+  let candidatesToRecompute = candidatesToEvaluate;
+
+  if (
+    normalizedMode === "one-on-one" &&
+    compatibilityCache.isEnabled() &&
+    !dataset.usesSampleData &&
+    seekerId
+  ) {
+    const candidateIds = candidatesToEvaluate.map((c) => c.id);
+    profileVersions = await getProfileVersions([seekerId, ...candidateIds]);
+    const seekerVersion = profileVersions.get(seekerId) ?? null;
+    const cached = await compatibilityCache.getTopK(seekerId);
+    validCacheEntries = (cached || []).filter(
+      (e) =>
+        e.candidateId &&
+        e.seekerVersion === seekerVersion &&
+        e.candidateVersion === profileVersions.get(e.candidateId) &&
+        candidateIds.includes(e.candidateId)
+    );
+    candidatesToRecompute = candidatesToEvaluate.filter(
+      (c) => !validCacheEntries.some((e) => e.candidateId === c.id)
+    );
+    debugLog.push(
+      `[matchService] compatibilityCache valid=${validCacheEntries.length} toRecompute=${candidatesToRecompute.length}`
+    );
+  }
+
   const affinityContext = await buildAffinityContext({
     seeker: mergedSeeker,
     candidates: candidatesToEvaluate,
@@ -422,11 +457,12 @@ const findMatches = async ({ seeker, availability, mode, filters = {} }) => {
     )
   );
 
-  if (normalizedMode === "one-on-three") {
-    if (candidatesToEvaluate.length < 3) {
+  if (["one-on-two", "one-on-three"].includes(normalizedMode)) {
+    const groupSize = normalizedMode === "one-on-two" ? 2 : 3;
+    if (candidatesToEvaluate.length < groupSize) {
       emptyReason = "Not enough candidates available to form a group pod yet.";
       debugLog.push(
-        "[matchService] insufficient candidates for one-on-three matching"
+        `[matchService] insufficient candidates for ${normalizedMode} matching`
       );
       return buildMatchPayload({
         mode: normalizedMode,
@@ -443,7 +479,7 @@ const findMatches = async ({ seeker, availability, mode, filters = {} }) => {
       seeker: mergedSeeker,
       seekerSchedule,
       candidates: candidatesToEvaluate,
-      groupSize: 3,
+      groupSize,
       affinityContext,
       debugLog,
     });
@@ -471,19 +507,49 @@ const findMatches = async ({ seeker, availability, mode, filters = {} }) => {
     });
   }
 
-  const matches = computePairMatches({
+  const newMatches = computePairMatches({
     seeker: mergedSeeker,
     seekerSchedule,
-    candidates: candidatesToEvaluate,
+    candidates: candidatesToRecompute,
     affinityContext,
     debugLog,
   });
+
+  const matches =
+    validCacheEntries.length > 0
+      ? sortMatches([
+          ...validCacheEntries.map((e) => e.matchPayload),
+          ...newMatches,
+        ]).slice(0, 5)
+      : newMatches;
 
   if (matches.length === 0) {
     emptyReason = candidatesToEvaluate.length
       ? "No overlapping schedule blocks with the current filters. Try widening your availability or filters."
       : "No candidates match your current filters yet.";
     debugLog.push("[matchService] pair matching produced zero results");
+  }
+
+  if (
+    compatibilityCache.isEnabled() &&
+    !dataset.usesSampleData &&
+    seekerId &&
+    profileVersions.size > 0
+  ) {
+    const seekerVersion = profileVersions.get(seekerId) ?? null;
+    const topKSize = compatibilityCache.getTopKSize();
+    const cacheEntries = matches
+      .slice(0, topKSize)
+      .filter((m) => m.participants?.[0]?.id)
+      .map((m) => ({
+        candidateId: m.participants[0].id,
+        seekerVersion,
+        candidateVersion: profileVersions.get(m.participants[0].id) ?? null,
+        matchPayload: m,
+      }));
+    compatibilityCache.setTopK(seekerId, cacheEntries).catch((err) => {
+      console.warn("[matchService] setTopK failed", err?.message);
+    });
   }
 
   console.debug("[matchService] pair matches summary", {

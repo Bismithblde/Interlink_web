@@ -1,7 +1,7 @@
 import type { SerializedFreeTimeSlot } from "../types/schedule";
 import { API_BASE_URL } from "./apiConfig";
 
-export type MatchMode = "ONE_ON_ONE" | "ONE_ON_THREE";
+export type MatchMode = "ONE_ON_ONE" | "ONE_ON_TWO" | "ONE_ON_THREE";
 
 export type MatchWindow = "NEXT_7_DAYS" | "NEXT_14_DAYS";
 
@@ -247,6 +247,7 @@ const MATCH_WINDOW_LABEL: Record<MatchWindow, string> = {
 
 const MATCH_MODE_TO_BACKEND: Record<MatchMode, string> = {
   ONE_ON_ONE: "one-on-one",
+  ONE_ON_TWO: "one-on-two",
   ONE_ON_THREE: "one-on-three",
 };
 

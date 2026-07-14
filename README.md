@@ -50,17 +50,13 @@ Welcome to **Interlink**, our commuter-student matchmaking and hangout-planning 
 #### Quickstart
 
 ```bash
-# Backend
-cd backend
-pnpm install
-cp env.example .env          # configure SUPABASE_* or leave blank for stubs
-pnpm run dev                 # default port :4000
-
-# Frontend
-cd ../frontend
-pnpm install
-cp env.example .env          # set VITE_API_BASE_URL if backend is not :4000
-pnpm run dev                 # default port :5173
+# From the repository root
+npm install
+npm --prefix backend install
+npm --prefix frontend install
+cp backend/env.example backend/.env
+cp frontend/env.example frontend/.env
+npm run dev                  # backend :3001, frontend :5173
 ```
 
 Visit `http://localhost:5173`. Stubbed auth instructions appear on the login screen. The Find Friend page seeds sample data and calls live matchmaking endpoints.
