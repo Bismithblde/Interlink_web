@@ -2,75 +2,13 @@ import { useRef } from "react";
 import { Link } from "react-router-dom";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { ScrollToPlugin } from "gsap/ScrollToPlugin";
 import { useGSAP } from "@gsap/react";
 import { useAuth } from "../context/AuthContext";
-import {
-  ArrowRight,
-  CalendarDays,
-  NotebookPen,
-  Sparkles,
-  UserCircle2,
-  UsersRound,
-} from "lucide-react";
+import SignedInDashboard from "../components/SignedInDashboard";
+import { ArrowRight } from "lucide-react";
 
-gsap.registerPlugin(ScrollTrigger, useGSAP);
-
-const profileValueCount = (value: unknown) =>
-  Array.isArray(value)
-    ? value.filter((item) => `${item}`.trim().length > 0).length
-    : 0;
-
-const featureCards = [
-  {
-    title: "Preview compatible study partners",
-    description:
-      "Compare schedule overlap, shared classes, and interests before sending a request.",
-    to: "/find-friends",
-    icon: UsersRound,
-  },
-  {
-    title: "Keep your availability honest",
-    description:
-      "Adjust free blocks as your week changes so every match starts from a current schedule.",
-    to: "/schedule",
-    icon: CalendarDays,
-  },
-  {
-    title: "Shape your signal",
-    description:
-      "Update the classes, hobbies, and working style that help other students understand where you fit.",
-    to: "/profile",
-    icon: NotebookPen,
-  },
-  {
-    title: "Plan a low-friction meetup",
-    description:
-      "Turn a promising connection into a concrete study session or campus hangout.",
-    to: "/hangout-planner",
-    icon: Sparkles,
-  },
-];
-
-const quickActions = [
-  {
-    label: "Refresh survey",
-    description: "Update your onboarding answers with current context.",
-    to: "/survey",
-    icon: Sparkles,
-  },
-  {
-    label: "Review friends",
-    description: "Check accepted connections and pending study partners.",
-    to: "/friends",
-    icon: UsersRound,
-  },
-  {
-    label: "Tune profile",
-    description: "Edit the profile details people use to evaluate fit.",
-    to: "/profile",
-    icon: UserCircle2,
-  },
-];
+gsap.registerPlugin(ScrollTrigger, ScrollToPlugin, useGSAP);
 
 const landingInterests = [
   "Film",
@@ -98,20 +36,9 @@ const matchingSteps = [
 ];
 
 const DashboardPage = () => {
-  const { user, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
   const processSectionRef = useRef<HTMLElement>(null);
   const processPinRef = useRef<HTMLDivElement>(null);
-  const metadata =
-    (user as unknown as { user_metadata?: Record<string, unknown> })
-      ?.user_metadata ?? {};
-
-  const displayName =
-    (typeof metadata.name === "string" && metadata.name.trim()) ||
-    user?.email?.split("@")[0] ||
-    "there";
-
-  const hobbiesCount = profileValueCount(metadata.hobbies);
-  const classesCount = profileValueCount(metadata.classes);
 
   useGSAP(
     () => {
@@ -122,7 +49,7 @@ const DashboardPage = () => {
       const media = gsap.matchMedia();
 
       media.add(
-        "(min-width: 901px) and (prefers-reduced-motion: no-preference)",
+        "(min-width: 901px)",
         () => {
           const section = processSectionRef.current;
           const pin = processPinRef.current;
@@ -140,6 +67,9 @@ const DashboardPage = () => {
           const dots = gsap.utils.toArray<HTMLElement>(
             section.querySelectorAll(".matching-steps__rail"),
           );
+          const marks = gsap.utils.toArray<HTMLElement>(
+            section.querySelectorAll(".matching-preview__mark i"),
+          );
           const progress = section.querySelector<HTMLElement>(
             ".matching-steps__progress",
           );
@@ -150,23 +80,34 @@ const DashboardPage = () => {
 
           gsap.set(scenes, { autoAlpha: 0, yPercent: 8, scale: 0.97, zIndex: 0 });
           gsap.set(scenes[0], { autoAlpha: 1, yPercent: 0, scale: 1, zIndex: 1 });
-          gsap.set(steps, { opacity: 0.28 });
-          gsap.set(steps[0], { opacity: 1 });
+          gsap.set(steps, { opacity: 1, color: "rgba(23, 24, 23, 0.25)" });
+          gsap.set(steps[0], { color: "#171817" });
           gsap.set(dots, { backgroundColor: "#cbc7bd", scale: 0.72 });
           gsap.set(dots[0], { backgroundColor: "#171817", scale: 1 });
+          gsap.set(marks, { backgroundColor: "rgba(23, 24, 23, 0.18)" });
+          gsap.set(marks[0], { backgroundColor: "#171817" });
           gsap.set(progress, { scaleY: 0, transformOrigin: "top center" });
+
+          let activeIndex = 0;
+          let scrollTween: gsap.core.Tween | null = null;
+          let releaseTimer: ReturnType<typeof window.setTimeout> | null = null;
 
           const timeline = gsap.timeline({
             defaults: { ease: "power2.inOut" },
             scrollTrigger: {
               trigger: section,
               start: "top top",
-              end: () => `+=${Math.round(window.innerHeight * 3)}`,
+              end: () => `+=${Math.round(window.innerHeight * (scenes.length - 1))}`,
               pin,
               pinSpacing: true,
-              scrub: 0.45,
+              scrub: true,
               anticipatePin: 1,
               invalidateOnRefresh: true,
+              onUpdate: (self) => {
+                if (!scrollTween) {
+                  activeIndex = Math.round(self.progress * (scenes.length - 1));
+                }
+              },
             },
           });
 
@@ -207,12 +148,12 @@ const DashboardPage = () => {
               )
               .to(
                 steps[index - 1],
-                { opacity: 0.28, duration: transitionDuration },
+                { color: "rgba(23, 24, 23, 0.25)", duration: transitionDuration },
                 transitionStart,
               )
               .to(
                 steps[index],
-                { opacity: 1, duration: transitionDuration },
+                { color: "#171817", duration: transitionDuration },
                 transitionStart,
               )
               .to(
@@ -232,10 +173,89 @@ const DashboardPage = () => {
                   duration: transitionDuration,
                 },
                 transitionStart,
+              )
+              .to(
+                marks[index - 1],
+                {
+                  backgroundColor: "rgba(23, 24, 23, 0.18)",
+                  duration: transitionDuration,
+                },
+                transitionStart,
+              )
+              .to(
+                marks[index],
+                { backgroundColor: "#171817", duration: transitionDuration },
+                transitionStart,
               );
           }
 
-          return () => timeline.kill();
+          const transitionTo = (nextIndex: number) => {
+            const trigger = timeline.scrollTrigger;
+
+            if (!trigger || nextIndex < 0 || nextIndex >= scenes.length) {
+              return;
+            }
+
+            activeIndex = nextIndex;
+            const targetScroll =
+              trigger.start +
+              (trigger.end - trigger.start) * (nextIndex / (scenes.length - 1));
+
+            scrollTween?.kill();
+            scrollTween = gsap.to(window, {
+              scrollTo: { y: targetScroll, autoKill: false },
+              duration: 0.9,
+              ease: "power3.inOut",
+              overwrite: true,
+              onComplete: () => {
+                releaseTimer = window.setTimeout(() => {
+                  scrollTween = null;
+                  releaseTimer = null;
+                }, 180);
+              },
+            });
+          };
+
+          const handleWheel = (event: WheelEvent) => {
+            const trigger = timeline.scrollTrigger;
+
+            if (!trigger || Math.abs(event.deltaY) < 8) {
+              return;
+            }
+
+            const isWithinPinnedRange =
+              window.scrollY >= trigger.start - 1 && window.scrollY <= trigger.end + 1;
+
+            if (!isWithinPinnedRange) {
+              return;
+            }
+
+            if (scrollTween) {
+              event.preventDefault();
+              return;
+            }
+
+            const direction = event.deltaY > 0 ? 1 : -1;
+            const nextIndex = activeIndex + direction;
+
+            if (nextIndex < 0 || nextIndex >= scenes.length) {
+              return;
+            }
+
+            event.preventDefault();
+            transitionTo(nextIndex);
+          };
+
+          window.addEventListener("wheel", handleWheel, { passive: false });
+
+          return () => {
+            window.removeEventListener("wheel", handleWheel);
+            scrollTween?.kill();
+            if (releaseTimer !== null) {
+              window.clearTimeout(releaseTimer);
+            }
+            timeline.kill();
+          };
         },
       );
 
@@ -288,7 +308,11 @@ const DashboardPage = () => {
             <article className="matching-preview" aria-label="Interlink matching preview">
               <header className="matching-preview__header">
                 <span className="landing-display">Interlink</span>
-                <span className="matching-preview__avatar">IL</span>
+                <span className="matching-preview__mark" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                </span>
               </header>
 
               <div className="matching-preview__viewport">
@@ -297,13 +321,22 @@ const DashboardPage = () => {
                     <h3 className="landing-display">Set your week</h3>
                     <p>Mark the windows when meeting is actually possible.</p>
                     <div className="matching-week" aria-hidden="true">
-                      {["M", "T", "W", "T", "F", "S", "S"].map((day, index) => (
-                        <span key={`${day}-${index}`} className={index % 2 === 0 ? "is-open" : ""}>
-                          {day}
+                      {[
+                        ["M", "10–12"],
+                        ["T", ""],
+                        ["W", "2–5"],
+                        ["T", ""],
+                        ["F", "4–7"],
+                        ["S", ""],
+                        ["S", "11–1"],
+                      ].map(([day, time], index) => (
+                        <span key={`${day}-${index}`} className={time ? "is-open" : ""}>
+                          <b>{day}</b>
+                          <i />
+                          <small>{time || "Closed"}</small>
                         </span>
                       ))}
                     </div>
-                    <p className="matching-preview__caption">Four open windows this week</p>
                   </div>
                 </div>
 
@@ -311,17 +344,17 @@ const DashboardPage = () => {
                   <div className="matching-preview__section">
                     <h3 className="landing-display">Name your interests</h3>
                     <p>Classes, hobbies, places, and the pace you prefer.</p>
-                    <div className="matching-tags">
-                      {landingInterests.slice(0, 6).map((interest, index) => (
-                        <span key={interest} className={index === 4 ? "is-selected" : ""}>
-                          {interest}
-                        </span>
-                      ))}
-                    </div>
-                    <div className="matching-interest-orbit" aria-hidden="true">
-                      <span>Robotics</span>
-                      <span>Film</span>
-                      <span>Climbing</span>
+                    <div className="matching-interest-index" aria-hidden="true">
+                      <div className="matching-interest-index__primary">
+                        <span>Robotics</span>
+                        <span>Film</span>
+                      </div>
+                      <div className="matching-interest-index__secondary">
+                        <span>Climbing</span>
+                        <span>Late-night study</span>
+                        <span>Live music</span>
+                        <span>Coffee walks</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -329,14 +362,18 @@ const DashboardPage = () => {
                 <div className="matching-preview__scene">
                   <div className="matching-preview__section matching-preview__section--overlap">
                     <h3 className="landing-display">See the overlap</h3>
-                    <p>See why you match before you send a request.</p>
-                    <div className="matching-preview__venn" aria-hidden="true">
-                      <span />
-                      <span />
-                    </div>
-                    <div className="matching-overlap-result">
-                      <strong className="landing-display">3 shared windows</strong>
-                      <span>Robotics · Film · Coffee walks</span>
+                    <div className="matching-venn" aria-hidden="true">
+                      <span className="matching-venn__label matching-venn__label--you">You</span>
+                      <span className="matching-venn__label matching-venn__label--them">Them</span>
+                      <i className="matching-venn__circle matching-venn__circle--you" />
+                      <i className="matching-venn__circle matching-venn__circle--them" />
+                      <span className="matching-venn__tag matching-venn__tag--climbing">Climbing</span>
+                      <span className="matching-venn__tag matching-venn__tag--study">Late-night study</span>
+                      <span className="matching-venn__tag matching-venn__tag--robotics">Robotics</span>
+                      <span className="matching-venn__tag matching-venn__tag--film">Film</span>
+                      <span className="matching-venn__tag matching-venn__tag--coffee">Coffee walks</span>
+                      <span className="matching-venn__tag matching-venn__tag--music">Live music</span>
+                      <span className="matching-venn__tag matching-venn__tag--art">Studio art</span>
                     </div>
                   </div>
                 </div>
@@ -444,116 +481,7 @@ const DashboardPage = () => {
     );
   }
 
-  return (
-    <div className="member-dashboard">
-      <section className="member-hero" aria-labelledby="member-title">
-        <img
-          src="/assets/interlink-campus-dusk.png"
-          alt="A softly blurred campus at sunset"
-          className="member-hero__image"
-        />
-        <div className="member-hero__veil" aria-hidden="true" />
-        <div className="member-hero__inner">
-          <div className="member-hero__copy">
-            <p className="member-eyebrow">Welcome back, {displayName}</p>
-            <h1 id="member-title" className="landing-display">
-              Make room for a new connection.
-            </h1>
-            <p>
-              Your best matches begin where availability, interests, and the
-              kind of company you want all meet.
-            </p>
-            <div className="member-hero__actions">
-              <Link to="/find-friends" className="landing-button landing-button--ink">
-                See your matches
-                <ArrowRight aria-hidden="true" />
-              </Link>
-              <Link to="/schedule" className="member-secondary-link">
-                Update availability
-              </Link>
-            </div>
-          </div>
-
-          <aside className="member-signal" aria-label="Your matching signal">
-            <p>Your matching signal</p>
-            <div className="member-signal__numbers">
-              <div>
-                <strong className="landing-display">{hobbiesCount}</strong>
-                <span>hobby {hobbiesCount === 1 ? "tag" : "tags"}</span>
-              </div>
-              <div>
-                <strong className="landing-display">{classesCount}</strong>
-                <span>course {classesCount === 1 ? "connection" : "connections"}</span>
-              </div>
-            </div>
-            <div className="member-signal__overlap" aria-hidden="true">
-              <span />
-              <span />
-            </div>
-            <Link to="/profile">
-              Tune your profile
-              <ArrowRight aria-hidden="true" />
-            </Link>
-          </aside>
-        </div>
-      </section>
-
-      <section className="member-paths" aria-labelledby="member-paths-title">
-        <header className="member-section-heading">
-          <p>Your next move</p>
-          <h2 id="member-paths-title" className="landing-display">
-            Pick up where you left off.
-          </h2>
-        </header>
-        <div className="member-paths__list">
-          {featureCards.map((card, index) => {
-            const Icon = card.icon;
-            return (
-              <Link key={card.title} to={card.to} className="member-path">
-                <span className="member-path__number">0{index + 1}</span>
-                <span className="member-path__icon"><Icon aria-hidden="true" /></span>
-                <span className="member-path__body">
-                  <strong className="landing-display">{card.title}</strong>
-                  <span>{card.description}</span>
-                </span>
-                <ArrowRight className="member-path__arrow" aria-hidden="true" />
-              </Link>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="member-overlap" aria-labelledby="member-overlap-title">
-        <div className="member-overlap__art" aria-hidden="true">
-          <span />
-          <span />
-        </div>
-        <div className="member-overlap__copy">
-          <p>Connection starts with context</p>
-          <h2 id="member-overlap-title" className="landing-display">
-            Someone&apos;s week overlaps with yours.
-          </h2>
-          <p>
-            Keep your profile honest, keep your free time current, and let the
-            reason behind each recommendation stay visible.
-          </p>
-          <Link to="/find-friends" className="landing-button landing-button--amber">
-            Find them
-            <ArrowRight aria-hidden="true" />
-          </Link>
-        </div>
-      </section>
-
-      <footer className="member-footer">
-        <p className="landing-display">Interlink</p>
-        <nav aria-label="Quick actions">
-          {quickActions.map((action) => (
-            <Link key={action.label} to={action.to}>{action.label}</Link>
-          ))}
-        </nav>
-      </footer>
-    </div>
-  );
+  return <SignedInDashboard />;
 };
 
 export default DashboardPage;

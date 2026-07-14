@@ -67,6 +67,33 @@ describe("Matchmaking routes", () => {
     );
   });
 
+  test("POST /matchmaking/matches supports matching with two other people", async () => {
+    const response = await request(app)
+      .post("/matchmaking/matches")
+      .send({
+        user: {
+          id: "test-user-two-person-group",
+          name: "Test User",
+          interests: ["ai", "robotics"],
+        },
+        availability: [
+          {
+            id: "slot-group-two",
+            title: "Morning focus",
+            start: "2025-01-15T14:00:00.000Z",
+            end: "2025-01-15T16:00:00.000Z",
+          },
+        ],
+        mode: "one-on-two",
+      })
+      .expect(200);
+
+    assert.equal(response.body.mode, "one-on-two");
+    assert.ok(Array.isArray(response.body.matches));
+    assert.ok(response.body.matches.length > 0, "Expected at least one group match");
+    assert.equal(response.body.matches[0].participants.length, 2);
+  });
+
   test("POST /matchmaking/matches returns empty reason when no overlap", async () => {
     const response = await request(app)
       .post("/matchmaking/matches")

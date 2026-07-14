@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { Route, Routes, useNavigate } from "react-router-dom";
+import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 import TopNav from "./components/TopNav";
 
@@ -9,7 +9,6 @@ const SignupPage = lazy(() => import("./pages/SignupPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const SchedulePage = lazy(() => import("./pages/SchedulePage"));
 const SurveyPage = lazy(() => import("./pages/SurveyPage"));
-const FindFriend = lazy(() => import("./pages/FindFriend"));
 const FriendsPage = lazy(() => import("./pages/FriendsPage"));
 const HangoutPlanner = lazy(() => import("./pages/HangoutPlanner"));
 
@@ -48,7 +47,7 @@ function App() {
             <Route path="/survey" element={<SurveyPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/schedule" element={<SchedulePage />} />
-            <Route path="/find-friends" element={<FindFriend />} />
+            <Route path="/find-friends" element={<Navigate replace to="/" />} />
             <Route path="/friends" element={<FriendsPage />} />
             <Route path="/hangout-planner" element={<HangoutPlanner />} />
           </Routes>

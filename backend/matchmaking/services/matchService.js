@@ -19,6 +19,9 @@ const SUPPORTED_MODES = {
   "one-on-one": "one-on-one",
   "1-on-1": "one-on-one",
   one_on_one: "one-on-one",
+  "one-on-two": "one-on-two",
+  "1-on-2": "one-on-two",
+  one_on_two: "one-on-two",
   "one-on-three": "one-on-three",
   "1-on-3": "one-on-three",
   one_on_three: "one-on-three",
@@ -454,11 +457,12 @@ const findMatches = async ({ seeker, availability, mode, filters = {} }) => {
     )
   );
 
-  if (normalizedMode === "one-on-three") {
-    if (candidatesToEvaluate.length < 3) {
+  if (["one-on-two", "one-on-three"].includes(normalizedMode)) {
+    const groupSize = normalizedMode === "one-on-two" ? 2 : 3;
+    if (candidatesToEvaluate.length < groupSize) {
       emptyReason = "Not enough candidates available to form a group pod yet.";
       debugLog.push(
-        "[matchService] insufficient candidates for one-on-three matching"
+        `[matchService] insufficient candidates for ${normalizedMode} matching`
       );
       return buildMatchPayload({
         mode: normalizedMode,
@@ -475,7 +479,7 @@ const findMatches = async ({ seeker, availability, mode, filters = {} }) => {
       seeker: mergedSeeker,
       seekerSchedule,
       candidates: candidatesToEvaluate,
-      groupSize: 3,
+      groupSize,
       affinityContext,
       debugLog,
     });

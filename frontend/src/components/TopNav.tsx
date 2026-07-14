@@ -32,6 +32,8 @@ const TopNav = ({
   const location = useLocation();
   const isLandingPage = !isAuthenticated && location.pathname === "/";
   const isMemberHome = isAuthenticated && location.pathname === "/";
+  const isAuthEntryPage =
+    !isAuthenticated && ["/login", "/signup"].includes(location.pathname);
 
   const navLinkClassName = ({ isActive }: { isActive: boolean }) =>
     [
@@ -106,39 +108,34 @@ const TopNav = ({
 
   if (isMemberHome) {
     return (
-      <header className="absolute inset-x-0 top-0 z-40 text-[#171817]">
-        <div className="mx-auto flex h-24 w-full max-w-[96rem] items-center justify-between gap-5 px-5 sm:px-8 lg:px-10">
+      <header className="match-member-nav">
+        <div className="match-member-nav__inner">
           <Link
             to="/"
-            className="landing-display rounded-sm text-[2rem] leading-none tracking-[-0.05em] transition-opacity hover:opacity-65 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#171817]"
+            className="match-member-nav__brand landing-display"
           >
             Interlink
           </Link>
-          <nav className="flex items-center gap-2 text-sm font-medium sm:gap-5" aria-label="Dashboard navigation">
-            <Link className="hidden transition-opacity hover:opacity-55 md:inline" to="/schedule">
+          <nav className="match-member-nav__links" aria-label="Dashboard navigation">
+            <Link to="/schedule">
               Schedule
             </Link>
-            <Link className="hidden transition-opacity hover:opacity-55 lg:inline" to="/friends">
+            <Link to="/friends">
               Connections
-            </Link>
-            <Link className="hidden transition-opacity hover:opacity-55 lg:inline" to="/hangout-planner">
-              Plan a hangout
-            </Link>
-            <Link className="hidden transition-opacity hover:opacity-55 sm:inline" to="/profile">
-              Profile
             </Link>
             <button
               type="button"
               onClick={onLogout}
-              className="hidden transition-opacity hover:opacity-55 xl:inline"
+              className="match-member-nav__signout"
             >
               Sign out
             </button>
             <Link
-              to="/find-friends"
-              className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[#171817] px-5 text-sm font-semibold text-[#f2eee4] shadow-[0_18px_45px_-24px_rgba(23,24,23,0.75)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#292a27] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#171817] active:translate-y-px"
+              to="/profile"
+              className="match-member-nav__profile"
+              aria-label="Open profile"
             >
-              Find a match
+              <UserCircle2 aria-hidden="true" />
             </Link>
           </nav>
         </div>
@@ -170,6 +167,29 @@ const TopNav = ({
               Find your people
             </Link>
           </nav>
+        </div>
+      </header>
+    );
+  }
+
+  if (isAuthEntryPage) {
+    const isSignupPage = location.pathname === "/signup";
+
+    return (
+      <header className="absolute inset-x-0 top-0 z-40 text-[#f7f3eb]">
+        <div className="mx-auto flex h-24 w-full max-w-[96rem] items-center justify-between px-5 sm:px-8 lg:px-10">
+          <Link
+            to="/"
+            className="landing-display rounded-sm text-[2rem] leading-none tracking-[-0.05em] transition-opacity hover:opacity-65 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
+          >
+            Interlink
+          </Link>
+          <Link
+            to={isSignupPage ? "/login" : "/signup"}
+            className="rounded-sm text-sm font-medium transition-opacity hover:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
+          >
+            {isSignupPage ? "Log in" : "Create account"}
+          </Link>
         </div>
       </header>
     );
