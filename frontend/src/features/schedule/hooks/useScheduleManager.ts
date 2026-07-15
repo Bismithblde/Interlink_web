@@ -204,9 +204,10 @@ export const useScheduleManager = (userId?: string | null) => {
         .sort((a, b) => a.start.getTime() - b.start.getTime())
         .map((slot) => ({
           id: slot.id,
-          day: format(slot.start, "EEEE"),
+          day: format(slot.start, "EEE d"),
           start: format(slot.start, "p"),
           end: format(slot.end, "p"),
+          color: slot.color,
           durationMinutes: Math.round(
             (slot.end.getTime() - slot.start.getTime()) / (1000 * 60)
           ),

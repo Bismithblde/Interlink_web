@@ -5,6 +5,7 @@ import type { FreeTimeSlot } from "../../../types/schedule";
 import {
   DnDCalendar,
   DEFAULT_VIEW,
+  calendarFormats,
   calendarMessages,
   localizer,
   SLOT_MINUTES,
@@ -38,8 +39,8 @@ const ScheduleCalendar = ({
     events={events}
     view={DEFAULT_VIEW}
     defaultView={DEFAULT_VIEW}
-    min={new Date(1970, 1, 1, 6, 0)}
-    max={new Date(1970, 1, 1, 22, 0)}
+    min={new Date(1970, 1, 1, 8, 0)}
+    max={new Date(1970, 1, 1, 20, 0)}
     step={SLOT_MINUTES}
     timeslots={2}
     selectable
@@ -50,13 +51,14 @@ const ScheduleCalendar = ({
     onEventResize={onEventResize}
     onSelectEvent={onSelectEvent}
     eventPropGetter={eventPropGetter}
+    formats={calendarFormats}
     messages={calendarMessages}
     components={{
       toolbar: WeeklyToolbar,
     }}
     style={{
       height: "100%",
-      minHeight: "540px",
+      minHeight: "580px",
       width: "100%",
     }}
   />

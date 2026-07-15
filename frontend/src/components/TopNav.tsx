@@ -31,7 +31,8 @@ const TopNav = ({
 }: TopNavProps) => {
   const location = useLocation();
   const isLandingPage = !isAuthenticated && location.pathname === "/";
-  const isMemberHome = isAuthenticated && location.pathname === "/";
+  const usesMemberNav =
+    isAuthenticated && ["/", "/schedule"].includes(location.pathname);
   const isAuthEntryPage =
     !isAuthenticated && ["/login", "/signup"].includes(location.pathname);
 
@@ -106,9 +107,15 @@ const TopNav = ({
     void loadInbox();
   }, [isAuthenticated, accessToken, loadInbox]);
 
-  if (isMemberHome) {
+  if (usesMemberNav) {
     return (
-      <header className="match-member-nav">
+      <header
+        className={
+          location.pathname === "/schedule"
+            ? "match-member-nav match-member-nav--schedule"
+            : "match-member-nav"
+        }
+      >
         <div className="match-member-nav__inner">
           <Link
             to="/"
@@ -117,7 +124,11 @@ const TopNav = ({
             Interlink
           </Link>
           <nav className="match-member-nav__links" aria-label="Dashboard navigation">
-            <Link to="/schedule">
+            <Link
+              to="/schedule"
+              className={location.pathname === "/schedule" ? "is-active" : undefined}
+              aria-current={location.pathname === "/schedule" ? "page" : undefined}
+            >
               Schedule
             </Link>
             <Link to="/friends">

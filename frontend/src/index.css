@@ -1742,6 +1742,12 @@ body::before {
   backdrop-filter: blur(22px) saturate(0.86);
 }
 
+.match-member-nav--schedule .match-member-nav__inner {
+  border-color: rgba(23, 24, 23, 0.1);
+  background: rgba(247, 245, 240, 0.94);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.9);
+}
+
 .match-member-nav__brand {
   border-radius: 0.2rem;
   font-size: 2.25rem;
@@ -1766,6 +1772,11 @@ body::before {
 .match-member-nav__links > a,
 .match-member-nav__signout {
   transition: opacity 180ms ease;
+}
+
+.match-member-nav__links > a.is-active {
+  color: #171817;
+  font-weight: 650;
 }
 
 .match-member-nav__profile {
