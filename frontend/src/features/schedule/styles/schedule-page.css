@@ -3,11 +3,32 @@
   --schedule-paper: #f3eee4;
   --schedule-muted: rgba(23, 24, 23, 0.58);
   --schedule-line: rgba(23, 24, 23, 0.11);
+  position: relative;
+  isolation: isolate;
   min-height: 100dvh;
+  overflow: hidden;
   background-color: var(--schedule-paper);
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='paper-grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.78' numOctaves='4' seed='17' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23paper-grain)' opacity='.055'/%3E%3C/svg%3E");
-  background-size: 11rem 11rem;
   color: var(--schedule-ink);
+}
+
+.schedule-page::before,
+.schedule-page::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+}
+
+.schedule-page::before {
+  background: url("/assets/interlink-schedule-paper-topography.png") center / cover no-repeat;
+  transform: scale(1.02);
+}
+
+.schedule-page::after {
+  z-index: -1;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='paper-grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.78' numOctaves='4' seed='17' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23paper-grain)' opacity='.045'/%3E%3C/svg%3E");
+  background-size: 11rem 11rem;
 }
 
 .schedule-page__frame {
@@ -95,20 +116,11 @@
 }
 
 .schedule-page__done {
-  display: inline-flex;
-  min-width: 18rem;
-  min-height: 4.2rem;
-  align-items: center;
-  justify-content: center;
-  border-radius: 1rem;
-  background: #171b1f;
-  color: #f7f3eb;
-  font-weight: 600;
-  transition: background-color 180ms ease, color 180ms ease;
+  flex: none;
 }
 
 .schedule-page__done:hover {
-  background: #30353a;
+  color: #f7f3eb;
 }
 
 .schedule-page__done:focus-visible,

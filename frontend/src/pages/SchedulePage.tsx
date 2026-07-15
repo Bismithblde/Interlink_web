@@ -89,7 +89,7 @@ const SchedulePage = () => {
             <Check aria-hidden="true" />
             <span>{saveStatus}</span>
           </div>
-          <Link to="/" className="schedule-page__done">
+          <Link to="/" className="schedule-page__done app-primary-action">
             Done with this week
           </Link>
         </footer>

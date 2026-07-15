@@ -272,7 +272,7 @@ const SignedInDashboard = () => {
     <main ref={pageRef} className="match-dashboard">
       <img
         className="match-dashboard__backdrop"
-        src="/assets/interlink-dashboard-grain.png"
+        src="/assets/interlink-dashboard-paper-topography.png"
         alt=""
         aria-hidden="true"
       />
@@ -410,6 +410,7 @@ const SignedInDashboard = () => {
 
           <div className="match-dashboard__action">
             <button
+              className="app-primary-action"
               type="submit"
               disabled={!slots.length || isLoadingSchedule || isMatching}
             >

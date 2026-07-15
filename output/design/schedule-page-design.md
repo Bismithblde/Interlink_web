@@ -6,11 +6,9 @@ The schedule page should feel like a natural continuation of the public landing 
 
 The experience should feel calm and human. Scheduling is framed as making room for connection, not as administering calendar data.
 
-## Revised signature background
+## Shared route atmosphere
 
-The page's signature artifact is an original mixed-media campus-route photogram, not a blurred stock-style campus photograph. It combines a tactile overhead campus path study, translucent vellum map fragments, long-exposure traces of intersecting routes, and a few crisp registration details into one continuous photographic-art surface. Directional amber light enters from the upper right and cool mineral blue settles into the lower left, echoing Interlink's availability colors without becoming a generic two-color gradient.
-
-The background must read as a real authored composition with foreground paper fibers, a midground network of paths and overlapping route traces, and a deeper architectural silhouette. It must not use soft radial blobs, candy aurora gradients, a centered glow, a generic skyline, or empty cream haze. Grain belongs to the background substrate only and never muddies the interface text.
+The dashboard and schedule should feel cut from the same physical substrate. The dashboard carries the full cinematic paper field. The schedule uses a lighter, desaturated crop of that field beneath an oyster paper wash so the grid remains the focal artifact. Grain belongs behind the interface and never overlays or muddies calendar text.
 
 ### Light solid-color direction
 
@@ -55,9 +53,9 @@ The backdrop should blend warm cream, pale gold, clouded blue, and a small amoun
 
 ## Navbar
 
-Use the supplied navbar reference as the exact structural source.
+Use one shared navbar component and the supplied reference as the exact structural source.
 
-- Positioned 24 px from the top and about 52 px from the sides, centered.
+- Positioned 24 px from the top and sides, centered within the same 102rem route frame.
 - Height about 86 px with a 17 px corner radius.
 - Translucent warm-paper fill, white hairline border, inner highlight, and 22 px background blur.
 - Left: `Interlink` wordmark in the established editorial serif at about 34 px.
@@ -68,7 +66,7 @@ Use the supplied navbar reference as the exact structural source.
 
 Desktop canvas: 1600 by 1000, showing the complete primary scheduling experience above the fold.
 
-1. Atmospheric full-bleed background derived from the dashboard, with soft-focus campus light and visible paper-like grain.
+1. Quiet full-bleed paper atmosphere derived from the dashboard, desaturated and lightened for grid legibility.
 2. Floating dashboard navbar.
 3. Intro area beginning around 180 px from the top:
    - Headline: `Make room for each other.`
@@ -80,11 +78,11 @@ Desktop canvas: 1600 by 1000, showing the complete primary scheduling experience
 
 ## Calendar component
 
-- One large translucent panel with a 20 to 22 px radius.
+- One continuous, flat weekly grid with no raised column cards or doubled borders.
 - Header row contains `Your week`, the date range `Jul 13 - Jul 19`, and a short drag instruction. Week-navigation buttons are intentionally omitted.
 - Seven day columns labeled `MON 13` through `SUN 19`.
 - Visible range: 8 AM to 8 PM. Use fine horizontal rules and even vertical separators.
-- Availability blocks are rounded capsules with light internal texture, small time labels, and no heavy shadow.
+- Availability blocks are compact flat fields with small time labels and no heavy shadow.
 - Use amber for selected or primary slots and dusty blue for alternate slots.
 - Show realistic sample blocks on several days so the interaction is immediately understandable.
 - Do not render a current-time indicator. It reads as an unexplained stray line inside availability blocks.
@@ -112,7 +110,7 @@ A quieter editorial interpretation where each day reads as a tall paper folio wi
 
 ## Controls and states
 
-- Primary action: deep ink button, warm-paper text, 16 px radius, minimum height 64 px.
+- Primary action: shared with the dashboard, deep ink button, warm-paper Fraunces label at 1.55rem, 16 px radius, 24rem width, and 5.15rem minimum height.
 - Secondary controls: paper-glass fill, 1 px ink or white hairline, 10 to 12 px radius.
 - Hover: subtle 2 px lift or opacity change.
 - Focus: 2 px ink outline with 4 px offset.
@@ -121,8 +119,8 @@ A quieter editorial interpretation where each day reads as a tall paper folio wi
 
 ## Spacing and shape language
 
-- Maximum content width: about 1310 px.
-- Page side padding: 48 to 72 px desktop.
+- Maximum content width: 102rem.
+- Page side padding: 24 px desktop.
 - Large vertical gaps: 40 to 64 px.
 - Panel padding: 24 to 32 px.
 - Primary radii: 16 to 22 px.
