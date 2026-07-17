@@ -1,7 +1,7 @@
 .schedule-calendar {
   --calendar-ink: #171817;
   --calendar-muted: rgba(23, 24, 23, 0.5);
-  --calendar-line: rgba(23, 24, 23, 0.1);
+  --calendar-line: rgba(23, 24, 23, 0.17);
   background: transparent;
   color: var(--calendar-ink);
 }
@@ -141,7 +141,7 @@
 }
 
 .schedule-calendar .rbc-day-slot .rbc-time-slot + .rbc-time-slot {
-  border-top: 1px solid rgba(23, 24, 23, 0.055);
+  border-top: 1px solid rgba(23, 24, 23, 0.09);
 }
 
 .schedule-calendar .rbc-time-gutter .rbc-timeslot-group,
@@ -163,7 +163,7 @@
 
 .schedule-calendar .rbc-event {
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.46);
+  border: 1px solid rgba(23, 24, 23, 0.34);
   border-radius: 0.15rem;
   padding: 0.18rem 0.4rem;
   box-shadow: none;

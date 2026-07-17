@@ -242,7 +242,7 @@ const baseAffinityEntry = ({ candidate, sharedHobbies, sharedInterests, sameMajo
   traitHighlights: [],
 });
 
-const buildAffinityContext = async ({ seeker = {}, candidates = [] }) => {
+const buildAffinityContext = async ({ seeker = {}, candidates = [], logger }) => {
   const seekerHobbies = toList(seeker.hobbies);
   const seekerInterests = toList(seeker.interests);
 
@@ -279,9 +279,11 @@ const buildAffinityContext = async ({ seeker = {}, candidates = [] }) => {
 
   const seekerVector = buildTokenVector(seeker);
   if (!seekerVector) {
-    console.info(
-      "[affinityUtils] seeker profile missing descriptive data; semantic similarity will remain at 0"
-    );
+    logger?.warn("group.semantic_similarity_skipped", {
+      stage: "ranking",
+      reason: "seeker_profile_missing_descriptive_data",
+      candidateCount: candidates.length,
+    });
     return context;
   }
 
@@ -332,7 +334,8 @@ const buildAffinityContext = async ({ seeker = {}, candidates = [] }) => {
     similaritiesAssigned > 0 ? "Profile Match" : "Schedule Match";
   context.metadata.assignments = similaritiesAssigned;
 
-  console.info("[affinityUtils] semantic similarity computed locally", {
+  logger?.debug("group.semantic_similarity_computed", {
+    stage: "ranking",
     strategy: context.metadata.similarityStrategy,
     candidatesProcessed: candidates.length,
     similaritiesAssigned,

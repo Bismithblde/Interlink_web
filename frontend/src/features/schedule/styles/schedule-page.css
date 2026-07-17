@@ -2,7 +2,7 @@
   --schedule-ink: #171817;
   --schedule-paper: #f3eee4;
   --schedule-muted: rgba(23, 24, 23, 0.58);
-  --schedule-line: rgba(23, 24, 23, 0.11);
+  --schedule-line: rgba(23, 24, 23, 0.18);
   position: relative;
   isolation: isolate;
   min-height: 100dvh;

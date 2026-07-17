@@ -42,7 +42,7 @@ module.exports = async function authMiddleware(req, res, next) {
           const profile = await supabase
             .from("match_profiles")
             .select(
-              "full_name,email,major,interests,hobbies,bio,fun_fact,favorite_spot,vibe_check"
+              "full_name,email,major,interests,hobbies,classes,bio,fun_fact,favorite_spot,vibe_check,avatar_url,open_to"
             )
             .eq("id", req.user.id)
             .maybeSingle();
@@ -57,6 +57,7 @@ module.exports = async function authMiddleware(req, res, next) {
               major: profile.data.major ?? req.user.user_metadata?.major,
               interests: profile.data.interests ?? req.user.user_metadata?.interests,
               hobbies: profile.data.hobbies ?? req.user.user_metadata?.hobbies,
+              classes: profile.data.classes ?? req.user.user_metadata?.classes,
               bio: profile.data.bio ?? req.user.user_metadata?.bio,
               funFact:
                 profile.data.fun_fact ?? req.user.user_metadata?.funFact,
@@ -65,6 +66,9 @@ module.exports = async function authMiddleware(req, res, next) {
                 req.user.user_metadata?.favoriteSpot,
               vibeCheck:
                 profile.data.vibe_check ?? req.user.user_metadata?.vibeCheck,
+              avatarUrl:
+                profile.data.avatar_url ?? req.user.user_metadata?.avatarUrl,
+              openTo: profile.data.open_to ?? req.user.user_metadata?.openTo,
             };
             req.user.user_metadata = metadata;
           }

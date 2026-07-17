@@ -58,6 +58,21 @@ const ProfilePage = () => {
       ? metadata.major.trim()
       : undefined;
   const instagramHandle = normalizeInstagram(metadata.instagram);
+  const bio =
+    typeof metadata.bio === "string" && metadata.bio.trim()
+      ? metadata.bio.trim()
+      : undefined;
+  const avatarUrl =
+    typeof metadata.avatarUrl === "string" && metadata.avatarUrl.trim()
+      ? metadata.avatarUrl.trim()
+      : undefined;
+  const openTo = toStringList(metadata.openTo);
+  const openToLabels: Record<string, string> = {
+    "new-friends": "New friends",
+    "study-buddy": "Study partners",
+    "project-partner": "Project collaborators",
+    "casual-hangout": "Campus activities",
+  };
 
   return (
     <AuthLayout>
@@ -71,6 +86,25 @@ const ProfilePage = () => {
             />
 
             <div className="mt-4 w-full space-y-4 rounded-3xl border border-slate-700 bg-slate-900/70 px-6 py-8 text-left text-sm text-slate-200">
+              {(avatarUrl || bio) && (
+                <div className="flex items-start gap-5 pb-4">
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt=""
+                      className="h-20 w-20 shrink-0 rounded-full object-cover"
+                    />
+                  ) : null}
+                  {bio ? (
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs font-semibold uppercase tracking-[0.3em] text-sky-300">
+                        About
+                      </span>
+                      <p className="m-0 max-w-2xl text-sm leading-6 text-slate-100">{bio}</p>
+                    </div>
+                  ) : null}
+                </div>
+              )}
               <div className="flex flex-col gap-1">
                 <span className="text-xs font-semibold uppercase tracking-[0.3em] text-sky-300">
                   Email
@@ -89,6 +123,16 @@ const ProfilePage = () => {
                   </span>
                 </div>
               )}
+              {openTo.length > 0 ? (
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-semibold uppercase tracking-[0.3em] text-sky-300">
+                    Open to
+                  </span>
+                  <span className="text-sm text-slate-100">
+                    {openTo.map((value) => openToLabels[value] ?? value).join(", ")}
+                  </span>
+                </div>
+              ) : null}
               {instagramHandle && (
                 <div className="flex flex-col gap-1">
                   <span className="text-xs font-semibold uppercase tracking-[0.3em] text-sky-300">
@@ -206,7 +250,7 @@ const ProfilePage = () => {
               <button
                 type="button"
                 onClick={() =>
-                  navigate("/survey", {
+                  navigate("/signup?step=profile&edit=1", {
                     state: {
                       name:
                         typeof metadata.name === "string"
@@ -218,7 +262,7 @@ const ProfilePage = () => {
                 }
                 className="inline-flex items-center rounded-full border border-sky-500/60 px-6 py-3 text-sm font-semibold text-sky-200 shadow-inner shadow-slate-950/40 transition hover:border-sky-400 hover:text-sky-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400"
               >
-                Edit survey details
+                Edit profile
               </button>
             </div>
           </NotebookCanvas>

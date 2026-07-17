@@ -362,7 +362,7 @@ const SignedInDashboard = () => {
           </label>
 
           <label className="match-field">
-            <span>Minimum overlap</span>
+            <span>Minimum consecutive overlap</span>
             <span className="match-field__control">
               <Clock3 aria-hidden="true" />
               <select

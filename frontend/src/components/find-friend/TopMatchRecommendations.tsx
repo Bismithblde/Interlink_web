@@ -215,7 +215,7 @@ const TopMatchRecommendations = ({
                 </span>
                 {semanticPercent !== null && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/15 px-3 py-1">
-                    Semantic match: {semanticPercent}%
+                    Profile fit: {semanticPercent}%
                   </span>
                 )}
                 {match.sharedHobbies && match.sharedHobbies.length > 0 && (

@@ -66,6 +66,13 @@ const toProfile = (record = {}) => ({
   funFact: record.fun_fact || record.funFact,
   favoriteSpot: record.favorite_spot || record.favoriteSpot,
   vibeCheck: record.vibe_check || record.vibeCheck,
+  avatarUrl: record.avatar_url || record.avatarUrl,
+  openTo: normalizeArray(record.open_to || record.openTo),
+  tags: Array.isArray(record.profileTags)
+    ? record.profileTags.map((entry) => entry?.tag?.slug || entry?.tag_id).filter(Boolean)
+    : normalizeArray(record.tags),
+  connections: normalizeArray(record.connections),
+  recentImpressions: Number(record.recentImpressions || 0),
   availability: normalizeAvailability(record.availability || record.availabilitySlots),
   instagram:
     sanitizeInstagram(record.instagram) ||
@@ -73,12 +80,18 @@ const toProfile = (record = {}) => ({
     sanitizeInstagram(record.social_instagram),
 });
 
-const fetchFromSampleDataset = async ({ seekerId }) => {
+const fetchFromSampleDataset = async ({ seekerId, logger }) => {
   const normalizedSeekerId =
     seekerId && typeof seekerId === "string" ? seekerId : null;
   const seekerProfile =
     sampleUsers.find((user) => user.id === normalizedSeekerId) || null;
   const candidates = sampleUsers.filter((user) => user.id !== normalizedSeekerId);
+
+  logger?.debug("dataset.sample.loaded", {
+    stage: "dataset",
+    seekerFound: Boolean(seekerProfile),
+    candidateCount: candidates.length,
+  });
 
   return {
     seekerProfile,
@@ -87,8 +100,9 @@ const fetchFromSampleDataset = async ({ seekerId }) => {
   };
 };
 
-const fetchFromSupabase = async ({ seekerId }) => {
-  const { data, error } = await supabase
+const fetchFromSupabase = async ({ seekerId, logger }) => {
+  const finishQuery = logger?.timer("dataset.supabase.queried", { stage: "dataset" });
+  const profilesResult = await supabase
     .from("match_profiles")
     .select(
       `
@@ -105,6 +119,14 @@ const fetchFromSupabase = async ({ seekerId }) => {
       vibe_check,
       bio,
       instagram,
+      avatar_url,
+      open_to,
+      profileTags:profile_tags(
+        tag_id,
+        confidence,
+        confirmed,
+        tag:canonical_tags(slug,label,category)
+      ),
       availability:availability_slots(
         id,
         title,
@@ -115,12 +137,39 @@ const fetchFromSupabase = async ({ seekerId }) => {
     `
     );
 
+  const [friendshipsResult, impressionsResult] = await Promise.all([
+    supabase.from("friendships").select("user_id,friend_id"),
+    supabase.from("recommendation_events").select("candidate_id").eq("event_type", "impression").gte("occurred_at", new Date(Date.now() - 7 * 86400000).toISOString()),
+  ]);
+
+  const { data, error } = profilesResult;
+
   if (error) {
+    finishQuery?.({ outcome: "error", query: "profiles", error }, "error");
     error.status = error.status || 500;
     throw error;
   }
+  if (friendshipsResult.error) {
+    finishQuery?.({ outcome: "error", query: "friendships", error: friendshipsResult.error }, "error");
+    throw friendshipsResult.error;
+  }
+  if (impressionsResult.error) {
+    finishQuery?.({ outcome: "error", query: "impressions", error: impressionsResult.error }, "error");
+    throw impressionsResult.error;
+  }
 
-  const profiles = (data || []).map(toProfile);
+  const connectionMap = new Map();
+  (friendshipsResult.data || []).forEach(({ user_id: userId, friend_id: friendId }) => {
+    if (!connectionMap.has(userId)) connectionMap.set(userId, []);
+    connectionMap.get(userId).push(friendId);
+  });
+  const impressionCounts = new Map();
+  (impressionsResult.data || []).forEach(({ candidate_id: candidateId }) => impressionCounts.set(candidateId, (impressionCounts.get(candidateId) || 0) + 1));
+  const profiles = (data || []).map((record) => toProfile({
+    ...record,
+    connections: connectionMap.get(record.id) || [],
+    recentImpressions: impressionCounts.get(record.id) || 0,
+  }));
   const normalizedSeekerId =
     seekerId && typeof seekerId === "string" ? seekerId : null;
 
@@ -131,6 +180,15 @@ const fetchFromSupabase = async ({ seekerId }) => {
       profile.id !== normalizedSeekerId && profile.availability.length > 0
   );
 
+  finishQuery?.({
+    outcome: "success",
+    profileCount: profiles.length,
+    candidateCount: candidates.length,
+    friendshipCount: friendshipsResult.data?.length || 0,
+    recentImpressionCount: impressionsResult.data?.length || 0,
+    seekerFound: Boolean(seekerProfile),
+  });
+
   return {
     seekerProfile,
     candidates,
@@ -138,9 +196,15 @@ const fetchFromSupabase = async ({ seekerId }) => {
   };
 };
 
-const fetchSeekerScheduleFallback = async (seekerId, existingProfile) => {
+const fetchSeekerScheduleFallback = async (seekerId, existingProfile, logger) => {
   if (!seekerId) return existingProfile;
   const availability = await scheduleStore.getSlots(seekerId);
+  logger?.debug("dataset.seeker_schedule.loaded", {
+    stage: "dataset",
+    seekerId,
+    persistedSlotCount: availability.length,
+    usedAsFallback: availability.length > 0,
+  });
   if (!existingProfile) {
     return {
       id: seekerId,
@@ -155,18 +219,33 @@ const fetchSeekerScheduleFallback = async (seekerId, existingProfile) => {
   };
 };
 
-const fetchMatchmakingDataset = async ({ seekerId }) => {
+const fetchMatchmakingDataset = async ({ seekerId, logger }) => {
+  const finishLoad = logger?.timer("dataset.loaded", {
+    stage: "dataset",
+    source: isSupabaseConfigured ? "supabase" : "sample",
+  });
+  logger?.info("dataset.source_selected", {
+    stage: "dataset",
+    source: isSupabaseConfigured ? "supabase" : "sample",
+    seekerId: seekerId || null,
+  });
   let dataset;
   if (isSupabaseConfigured) {
-    dataset = await fetchFromSupabase({ seekerId });
+    dataset = await fetchFromSupabase({ seekerId, logger });
   } else {
-    dataset = await fetchFromSampleDataset({ seekerId });
+    dataset = await fetchFromSampleDataset({ seekerId, logger });
   }
 
   const seekerProfile = await fetchSeekerScheduleFallback(
     seekerId,
-    dataset.seekerProfile
+    dataset.seekerProfile,
+    logger
   );
+
+  finishLoad?.({
+    candidateCount: dataset.candidates.length,
+    seekerFound: Boolean(seekerProfile),
+  });
 
   return {
     seekerProfile,
