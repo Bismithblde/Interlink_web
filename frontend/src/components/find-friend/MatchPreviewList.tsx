@@ -183,7 +183,7 @@ const MatchPreviewList = ({
                 </span>
                 {typeof match.semanticSimilarity === "number" && (
                   <span className="inline-flex items-center rounded-full bg-emerald-500/20 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-emerald-200">
-                    Semantic match {Math.round(match.semanticSimilarity * 100)}%
+                    Profile fit {Math.round(match.semanticSimilarity * 100)}%
                   </span>
                 )}
                 {match.sharedAvailability.map((slot, index) => (

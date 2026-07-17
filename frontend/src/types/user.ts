@@ -77,6 +77,7 @@ export interface UserProfile {
   interests?: string[];
   classes?: string[];
   bio?: string;
+  openTo?: ProfileIntent[];
   favoriteSpot?: string;
   avatarUrl?: string;
   bannerUrl?: string;
@@ -143,6 +144,7 @@ export interface UpdateProfilePayload
       | "classes"
       | "favoriteSpot"
       | "bio"
+      | "openTo"
       | "avatarUrl"
       | "bannerUrl"
       | "hobbies"
@@ -152,3 +154,32 @@ export interface UpdateProfilePayload
   > {
   connections?: UserConnection[];
 }
+
+export type ProfileIntent =
+  | "new-friends"
+  | "study-buddy"
+  | "project-partner"
+  | "casual-hangout";
+
+export type ProfileTag = {
+  id: string;
+  slug?: string;
+  label: string;
+  category?: string;
+  confidence?: number;
+  status?: "suggested" | "confirmed" | "dismissed";
+};
+
+export type ProfileEnrichmentStatus = {
+  status: "idle" | "queued" | "processing" | "ready" | "failed";
+  tags: ProfileTag[];
+  updatedAt?: string | null;
+  message?: string | null;
+};
+
+export type AvatarUploadDescriptor = {
+  uploadUrl: string;
+  avatarUrl: string;
+  method?: "PUT" | "POST";
+  headers?: Record<string, string>;
+};

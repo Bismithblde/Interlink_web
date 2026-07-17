@@ -1,40 +1,27 @@
-import { format } from "date-fns";
+import { endOfWeek, format, startOfWeek } from "date-fns";
 import type { ToolbarProps } from "react-big-calendar";
 
 import type { FreeTimeSlot } from "../../../types/schedule";
 
 type Props = ToolbarProps<FreeTimeSlot>;
 
+const formatWeekRange = (date: Date) => {
+  const start = startOfWeek(date, { weekStartsOn: 1 });
+  const end = endOfWeek(date, { weekStartsOn: 1 });
+
+  return `${format(start, "MMM d")} - ${format(end, "MMM d")}`;
+};
+
 const WeeklyToolbar = (props: Props) => (
-  <div className="mb-3 flex flex-col gap-3 border-b border-slate-800 pb-3 sm:flex-row sm:items-center sm:justify-between">
-    <div className="flex items-center gap-2">
-      <button
-        type="button"
-        onClick={() => props.onNavigate("TODAY")}
-        className="rounded-full border border-slate-700 bg-slate-900/60 px-4 py-1 text-sm font-medium text-slate-200 transition hover:bg-slate-900/70"
-      >
-        Today
-      </button>
-      <button
-        type="button"
-        onClick={() => props.onNavigate("PREV")}
-        className="rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-sm text-slate-200 transition hover:bg-slate-900/70"
-      >
-        ←
-      </button>
-      <button
-        type="button"
-        onClick={() => props.onNavigate("NEXT")}
-        className="rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-sm text-slate-200 transition hover:bg-slate-900/70"
-      >
-        →
-      </button>
+  <div className="schedule-toolbar">
+    <div className="schedule-toolbar__heading">
+      <h2 className="landing-display">Your week</h2>
+      <span>{formatWeekRange(props.date)}</span>
     </div>
-    <div className="text-sm font-semibold uppercase tracking-[0.25em] text-sky-400">
-      {format(props.date, "MMMM d, yyyy")}
-    </div>
+    <span className="schedule-toolbar__hint">
+      Drag across the grid to add time
+    </span>
   </div>
 );
 
 export default WeeklyToolbar;
-

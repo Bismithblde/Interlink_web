@@ -7,12 +7,8 @@ import type { FreeTimeSlot } from "../../types/schedule";
 
 export const SLOT_MINUTES = 30;
 export const SLOT_COLORS = [
-  "#bae6fd",
-  "#c7d2fe",
-  "#fbcfe8",
-  "#fde68a",
-  "#bbf7d0",
-  "#fecaca",
+  "#e7ad4b",
+  "#8eafc8",
 ];
 
 const locales = {
@@ -36,6 +32,10 @@ export const calendarMessages = {
   previous: "Back",
   next: "Next",
   today: "Today",
+};
+
+export const calendarFormats = {
+  dayFormat: (date: Date) => format(date, "EEE dd").toUpperCase(),
 };
 
 export const DnDCalendar = withDragAndDrop<FreeTimeSlot>(Calendar);

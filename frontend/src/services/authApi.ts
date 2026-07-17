@@ -4,6 +4,8 @@ import type {
   SignInResponse,
   SupabaseProfileResponse,
   SupabaseUser,
+  AvatarUploadDescriptor,
+  ProfileEnrichmentStatus,
 } from "../types/user";
 
 const normalizeBaseUrl = (value?: string) => {
@@ -18,6 +20,51 @@ type ErrorPayload = {
   error?: string;
   message?: string;
   details?: unknown;
+};
+
+type RawEnrichmentStatus = {
+  status?: string;
+  updatedAt?: string | null;
+  tags?: Array<{
+    id?: string;
+    slug?: string;
+    label?: string;
+    category?: string;
+    confidence?: number;
+    confirmed?: boolean;
+  }>;
+};
+
+const normalizeEnrichmentStatus = (
+  payload: RawEnrichmentStatus
+): ProfileEnrichmentStatus => {
+  const statusMap: Record<string, ProfileEnrichmentStatus["status"]> = {
+    not_started: "idle",
+    pending: "queued",
+    queued: "queued",
+    processing: "processing",
+    complete: "ready",
+    ready: "ready",
+    stale: "failed",
+    failed: "failed",
+  };
+
+  return {
+    status: statusMap[payload.status ?? ""] ?? "idle",
+    updatedAt: payload.updatedAt ?? null,
+    tags: (payload.tags ?? []).flatMap((tag) => {
+      const id = tag.id || tag.slug;
+      if (!id || !tag.label) return [];
+      return [{
+        id,
+        slug: tag.slug,
+        label: tag.label,
+        category: tag.category,
+        confidence: tag.confidence,
+        status: tag.confirmed ? "confirmed" as const : "suggested" as const,
+      }];
+    }),
+  };
 };
 
 class AuthApiError extends Error {
@@ -142,6 +189,45 @@ export const authApi = {
       },
       body: JSON.stringify(profileUpdates),
     });
+  },
+
+  async createAvatarUpload(
+    accessToken: string,
+    input: { contentType: string; fileSize: number }
+  ) {
+    return request<AvatarUploadDescriptor>("/auth/profile/avatar-upload", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(input),
+    });
+  },
+
+  async getEnrichmentStatus(accessToken: string) {
+    const result = await request<RawEnrichmentStatus>("/auth/profile/enrichment", {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+    return normalizeEnrichmentStatus(result);
+  },
+
+  async updateTagFeedback(
+    accessToken: string,
+    tagId: string,
+    action: "confirm" | "dismiss"
+  ) {
+    const result = await request<RawEnrichmentStatus>(
+      `/auth/profile/tags/${encodeURIComponent(tagId)}/${action}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
+    return normalizeEnrichmentStatus(result);
   },
 };
 

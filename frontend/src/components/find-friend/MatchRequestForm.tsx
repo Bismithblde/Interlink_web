@@ -2,11 +2,13 @@ import { useMemo } from "react";
 import type { FormEvent } from "react";
 import type { MatchMode, MatchWindow } from "../../services/findFriendApi";
 import { MATCH_WINDOW_OPTIONS } from "../../services/findFriendApi";
+import type { ProfileIntent } from "../../types/user";
 
 export type MatchPreferences = {
   window: MatchWindow;
   minOverlapMinutes: number;
   requireSameCourse: boolean;
+  intent: ProfileIntent;
 };
 
 type MatchRequestFormProps = {
@@ -20,7 +22,13 @@ type MatchRequestFormProps = {
   submitDisabledReason?: string | null;
 };
 
-const overlapOptions = [30, 45, 60, 75, 90, 120];
+const overlapOptions = [30, 60, 90, 120];
+const intentOptions: Array<{ value: ProfileIntent; label: string }> = [
+  { value: "new-friends", label: "Meet new friends" },
+  { value: "study-buddy", label: "Find a study partner" },
+  { value: "project-partner", label: "Build a project" },
+  { value: "casual-hangout", label: "Join an activity" },
+];
 
 const MatchRequestForm = ({
   mode,
@@ -33,7 +41,7 @@ const MatchRequestForm = ({
   submitDisabledReason = null,
 }: MatchRequestFormProps) => {
   const groupSizeLabel = useMemo(
-    () => (mode === "ONE_ON_ONE" ? "You + 1" : "You + 3"),
+    () => mode === "ONE_ON_ONE" ? "You + 1" : mode === "ONE_ON_TWO" ? "You + 2" : "You + 3",
     [mode]
   );
 
@@ -49,6 +57,10 @@ const MatchRequestForm = ({
       ...preferences,
       window: value,
     });
+  };
+
+  const handleIntentChange = (intent: ProfileIntent) => {
+    onChange({ ...preferences, intent });
   };
 
   const handleRequireSameCourseChange = (checked: boolean) => {
@@ -80,7 +92,19 @@ const MatchRequestForm = ({
       </header>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-3">
+          <label className="flex flex-col gap-2 rounded-3xl border border-slate-700 bg-slate-900/60 p-4">
+            <span className="text-xs font-semibold text-sky-300">I want to</span>
+            <select
+              value={preferences.intent}
+              onChange={(event) => handleIntentChange(event.target.value as ProfileIntent)}
+              disabled={controlsDisabled}
+              className="rounded-2xl border border-slate-600 bg-slate-950/70 px-4 py-3 text-sm font-medium text-slate-100 shadow-inner shadow-slate-950/40 focus:border-sky-400 focus:outline-none focus:ring focus:ring-sky-500/30"
+            >
+              {intentOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+            <span className="text-xs text-slate-400">We use this to prioritize people open to the same thing.</span>
+          </label>
           <label className="flex flex-col gap-2 rounded-3xl border border-slate-700 bg-slate-900/60 p-4">
             <span className="text-xs font-semibold uppercase tracking-[0.4em] text-sky-300">
               Match Window

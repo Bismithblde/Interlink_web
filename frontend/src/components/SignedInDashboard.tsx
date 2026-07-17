@@ -272,7 +272,7 @@ const SignedInDashboard = () => {
     <main ref={pageRef} className="match-dashboard">
       <img
         className="match-dashboard__backdrop"
-        src="/assets/interlink-dashboard-grain.png"
+        src="/assets/interlink-dashboard-paper-topography.png"
         alt=""
         aria-hidden="true"
       />
@@ -362,7 +362,7 @@ const SignedInDashboard = () => {
           </label>
 
           <label className="match-field">
-            <span>Minimum overlap</span>
+            <span>Minimum consecutive overlap</span>
             <span className="match-field__control">
               <Clock3 aria-hidden="true" />
               <select
@@ -410,6 +410,7 @@ const SignedInDashboard = () => {
 
           <div className="match-dashboard__action">
             <button
+              className="app-primary-action"
               type="submit"
               disabled={!slots.length || isLoadingSchedule || isMatching}
             >

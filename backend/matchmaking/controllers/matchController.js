@@ -4,6 +4,11 @@ const {
   generateActivitySuggestions,
   generateHangoutPlan,
 } = require("../services/activitySuggestionService");
+const { recordEvents } = require("../services/recommendationEventService");
+const {
+  createMatchmakingLogger,
+  createRequestId,
+} = require("../utils/matchmakingLogger");
 
 const sanitizeStringList = (value) =>
   Array.isArray(value)
@@ -44,12 +49,14 @@ const sanitizeSeeker = (payload = {}) => {
   const interests = sanitizeStringList(payload.interests);
   const hobbies = sanitizeStringList(payload.hobbies);
   const classes = sanitizeStringList(payload.classes);
+  const openTo = sanitizeStringList(payload.openTo);
 
   const seeker = {
     id: typeof payload.id === "string" ? payload.id : undefined,
     name: typeof payload.name === "string" ? payload.name : undefined,
     interests,
     hobbies,
+    openTo,
   };
 
   if (classes.length > 0) {
@@ -144,8 +151,12 @@ const sanitizeHangoutPayload = (payload = {}) => {
 };
 
 const planHangout = async (req, res) => {
+  const requestId = createRequestId();
+  const logger = createMatchmakingLogger({ requestId, operation: "hangout_plan" });
+  res.set("X-Matchmaking-Request-Id", requestId);
   try {
     if (!process.env.GEMINI_API_KEY) {
+      logger.warn("request.rejected", { stage: "configuration", reason: "gemini_api_key_missing" });
       return res.status(501).json({
         error: "Hangout planning not configured",
         message: "Set GEMINI_API_KEY to enable AI-powered hangout planning.",
@@ -157,6 +168,7 @@ const planHangout = async (req, res) => {
     );
 
     if (!seeker?.id || friends.length === 0) {
+      logger.warn("request.rejected", { stage: "validation", reason: "missing_participants", seekerId: seeker?.id || null, friendCount: friends.length });
       return res.status(400).json({
         error:
           "Provide a seeker profile and at least one friend to generate a hangout plan.",
@@ -168,7 +180,10 @@ const planHangout = async (req, res) => {
       friends,
       focus,
       durationMinutes,
+      logger,
     });
+
+    logger.info("request.completed", { stage: "http", outcome: "success", friendCount: friends.length, hasFocus: Boolean(focus) });
 
     return res.status(200).json({
       plan,
@@ -177,8 +192,8 @@ const planHangout = async (req, res) => {
       hasFocus: Boolean(focus),
     });
   } catch (error) {
-    console.error("[matchController.planHangout] failed", error);
-    return res.status(500).json({
+    logger.error("request.failed", { stage: "http", error });
+    return res.status(error.status || 500).json({
       error: "Failed to generate hangout plan",
       message: error.message ?? error,
     });
@@ -186,8 +201,12 @@ const planHangout = async (req, res) => {
 };
 
 const suggestActivities = async (req, res) => {
+  const requestId = createRequestId();
+  const logger = createMatchmakingLogger({ requestId, operation: "activity_suggestions" });
+  res.set("X-Matchmaking-Request-Id", requestId);
   try {
     if (!process.env.GEMINI_API_KEY) {
+      logger.warn("request.rejected", { stage: "configuration", reason: "gemini_api_key_missing" });
       return res.status(501).json({
         error: "Activity suggestions not configured",
         message: "Set GEMINI_API_KEY to enable AI-powered activity ideas.",
@@ -198,6 +217,7 @@ const suggestActivities = async (req, res) => {
     const hobbies = sanitizeStringList(req.body?.hobbies);
 
     if (!description && hobbies.length === 0) {
+      logger.warn("request.rejected", { stage: "validation", reason: "missing_description_and_hobbies" });
       return res.status(400).json({
         error: "Provide a short description or at least one hobby.",
       });
@@ -206,7 +226,10 @@ const suggestActivities = async (req, res) => {
     const suggestions = await generateActivitySuggestions({
       description,
       hobbies,
+      logger,
     });
+
+    logger.info("request.completed", { stage: "http", outcome: "success", suggestionCount: suggestions.length });
 
     return res.status(200).json({
       suggestions,
@@ -217,7 +240,7 @@ const suggestActivities = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("[matchController.suggestActivities] failed", error);
+    logger.error("request.failed", { stage: "http", error });
     return res.status(500).json({
       error: "Failed to generate activity suggestions",
       message: error.message ?? error,
@@ -276,10 +299,26 @@ const searchHobbies = async (req, res) => {
 };
 
 const createMatchPlan = async (req, res) => {
+  const requestId = createRequestId();
+  const logger = createMatchmakingLogger({ requestId, operation: "find_matches" });
+  res.set("X-Matchmaking-Request-Id", requestId);
+  const finishRequest = logger.timer("request.completed", { stage: "http" });
   try {
-    const { user, availability, mode, filters } = req.body || {};
+    const { user, availability, mode, filters, intent, openTo, minOverlapMinutes } = req.body || {};
+
+    logger.info("request.received", {
+      stage: "http",
+      seekerId: typeof user?.id === "string" ? user.id : null,
+      availabilityCount: Array.isArray(availability) ? availability.length : 0,
+      requestedMode: mode || "one-on-one",
+      requestedMinimumOverlapMinutes: minOverlapMinutes ?? null,
+      filterKeys: filters && typeof filters === "object" ? Object.keys(filters) : [],
+      hasIntent: Boolean(intent),
+    });
 
     if (!Array.isArray(availability) || availability.length === 0) {
+      logger.warn("request.rejected", { stage: "validation", reason: "missing_availability" });
+      finishRequest({ outcome: "rejected", statusCode: 400 }, "warn");
       return res.status(400).json({
         error: "availability array is required",
         hint: "Send the serialized slots captured on the Schedule page.",
@@ -287,29 +326,52 @@ const createMatchPlan = async (req, res) => {
     }
 
     const seeker = sanitizeSeeker(user);
+    if (Array.isArray(openTo)) seeker.openTo = sanitizeStringList(openTo);
     const sanitizedFilters = sanitizeFilters(filters);
 
-    console.debug("[matchController] createMatchPlan payload", {
-      seeker,
+    logger.debug("request.sanitized", {
+      stage: "validation",
+      seekerId: seeker.id || null,
+      seekerSignalCounts: {
+        interests: seeker.interests.length,
+        hobbies: seeker.hobbies.length,
+        classes: seeker.classes?.length || 0,
+        openTo: seeker.openTo.length,
+      },
       filterKeys: Object.keys(sanitizedFilters),
       availabilityCount: availability.length,
-      mode,
+      mode: mode || "one-on-one",
     });
 
     const payload = await findMatches({
+      requestId,
+      logger,
       seeker,
       availability,
       mode,
+      intent,
+      minOverlapMinutes,
       filters: sanitizedFilters,
     });
 
+    finishRequest({ outcome: "success", statusCode: 200, matchCount: payload.matches.length });
     return res.status(200).json(payload);
   } catch (error) {
-    console.error("[matchController.createMatchPlan] failed", error);
-    return res.status(500).json({
+    logger.error("request.failed", { stage: "http", error });
+    finishRequest({ outcome: "error", statusCode: error.status || 500 }, "error");
+    return res.status(error.status || 500).json({
       error: "Failed to generate matches",
       message: error.message ?? error,
     });
+  }
+};
+
+const recordRecommendationEvents = async (req, res) => {
+  try {
+    const rows = await recordEvents(req.body?.events, req.user?.id);
+    return res.status(202).json({ accepted: rows.length });
+  } catch (error) {
+    return res.status(error.status || 400).json({ error: error.message });
   }
 };
 
@@ -318,4 +380,5 @@ module.exports = {
   searchHobbies,
   suggestActivities,
   planHangout,
+  recordRecommendationEvents,
 };

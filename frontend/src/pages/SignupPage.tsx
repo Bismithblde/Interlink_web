@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { FormEvent, InputHTMLAttributes } from "react";
 import { ArrowRight, Eye, EyeOff } from "lucide-react";
 import type { SignupPayload } from "../types/user";
 import { authApi, AuthApiError } from "../services/authApi";
 import { useAuth } from "../context/AuthContext";
+import ProfileEditorForm from "../components/ProfileEditorForm";
 
 type SignupFieldProps = {
   id: string;
@@ -44,7 +45,13 @@ const SignupField = ({
 
 const SignupPage = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const [searchParams] = useSearchParams();
+  const { login, user, session } = useAuth();
+  const startsOnProfile = searchParams.get("step") === "profile" && Boolean(user);
+  const [step, setStep] = useState<"account" | "profile">(
+    startsOnProfile ? "profile" : "account"
+  );
+  const [accountCreated, setAccountCreated] = useState(startsOnProfile);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -55,17 +62,14 @@ const SignupPage = () => {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-
     if (!fullName || !email || !password || !confirmPassword) {
       setErrorMessage("Please complete all fields before signing up.");
       return;
     }
-
     if (password !== confirmPassword) {
       setErrorMessage("Passwords must match.");
       return;
     }
-
     if (!hasAcceptedTerms) {
       setErrorMessage("Please agree to the Terms and Privacy Policy.");
       return;
@@ -73,45 +77,29 @@ const SignupPage = () => {
 
     setIsSubmitting(true);
     setErrorMessage(null);
-
     try {
-      const signupPayload: SignupPayload = {
-        name: fullName,
-        email,
-        password,
-      };
-
+      const signupPayload: SignupPayload = { name: fullName, email, password };
       await authApi.signUp(signupPayload);
-
       try {
-        const signInResponse = await authApi.signIn({
-          email,
-          password,
-        });
-        if (signInResponse?.user) {
-          login(signInResponse.user, signInResponse.session ?? null);
+        const response = await authApi.signIn({ email, password });
+        if (!response.user || !response.session?.access_token) {
+          throw new Error("Sign in did not return an active session.");
         }
+        login(response.user, response.session);
+        setAccountCreated(true);
+        setStep("profile");
       } catch (autoLoginError) {
-        console.warn(
-          "[SignupPage] Auto sign-in after signup failed; continuing to survey",
-          autoLoginError
+        console.warn("[SignupPage] Auto sign-in after signup failed", autoLoginError);
+        setErrorMessage(
+          "Your account was created, but we could not sign you in. Log in to finish your profile."
         );
       }
-
-      navigate("/survey", {
-        replace: true,
-        state: {
-          name: fullName,
-          email,
-        },
-      });
     } catch (error) {
-      const message =
+      setErrorMessage(
         error instanceof AuthApiError
           ? error.message
-          : "We could not complete your signup right now. Please try again.";
-      console.error("[SignupPage] Signup failure", error);
-      setErrorMessage(message);
+          : "We could not complete your signup right now. Please try again."
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -119,108 +107,60 @@ const SignupPage = () => {
 
   return (
     <div className="signup-page">
-      <img
-        className="signup-page__backdrop"
-        src="/assets/interlink-campus-dusk.png"
-        alt=""
-        aria-hidden="true"
-      />
+      <img className="signup-page__backdrop" src="/assets/interlink-campus-dusk.png" alt="" aria-hidden="true" />
       <div className="signup-page__veil" aria-hidden="true" />
 
       <section className="signup-page__content" aria-labelledby="signup-title">
         <div className="signup-page__intro">
           <h1 id="signup-title" className="landing-display">
-            Create your Interlink account
+            {step === "profile" ? "Build a profile that feels like you" : "Create your Interlink account"}
           </h1>
           <p>
-            Start with the basics. Your schedule, interests, and campus context
-            come next.
+            {step === "profile"
+              ? "Share the details that help us make thoughtful campus introductions."
+              : "Start with the basics. Your schedule, interests, and campus context come next."}
           </p>
         </div>
 
-        <form className="signup-form" onSubmit={handleSubmit} noValidate>
-          <div className="signup-tabs" role="tablist" aria-label="Signup progress">
-            <button type="button" role="tab" aria-selected="true" className="is-active">
-              Account
-            </button>
-            <button type="button" role="tab" aria-selected="false" disabled>
-              Profile
-            </button>
-          </div>
+        {step === "account" ? (
+          <form className="signup-form" onSubmit={handleSubmit} noValidate>
+            <div className="signup-tabs" role="tablist" aria-label="Signup progress">
+              <button type="button" role="tab" aria-selected="true" className="is-active">Account</button>
+              <button type="button" role="tab" aria-selected="false" disabled={!accountCreated} onClick={() => setStep("profile")}>Profile</button>
+            </div>
 
-          <div className="signup-form__fields">
-            <SignupField
-              id="fullName"
-              label="Full name"
-              autoComplete="name"
-              placeholder="Avery Morgan"
-              value={fullName}
-              onChange={(event) => setFullName(event.target.value)}
-              required
-            />
-            <SignupField
-              id="email"
-              label="Email"
-              type="email"
-              autoComplete="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              required
-            />
-            <SignupField
-              id="password"
-              label="Password"
-              type="password"
-              autoComplete="new-password"
-              placeholder="Create a password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              canRevealPassword
-              required
-            />
-            <SignupField
-              id="confirmPassword"
-              label="Confirm password"
-              type="password"
-              autoComplete="new-password"
-              placeholder="Repeat your password"
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              canRevealPassword
-              required
-            />
-          </div>
+            <div className="signup-form__fields">
+              <SignupField id="fullName" label="Full name" autoComplete="name" placeholder="Avery Morgan" value={fullName} onChange={(event) => setFullName(event.target.value)} required />
+              <SignupField id="email" label="Email" type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(event) => setEmail(event.target.value)} required />
+              <SignupField id="password" label="Password" type="password" autoComplete="new-password" placeholder="Create a password" value={password} onChange={(event) => setPassword(event.target.value)} canRevealPassword required />
+              <SignupField id="confirmPassword" label="Confirm password" type="password" autoComplete="new-password" placeholder="Repeat your password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} canRevealPassword required />
+            </div>
 
-          {errorMessage ? (
-            <p className="signup-form__error" role="alert">
-              {errorMessage}
-            </p>
-          ) : null}
+            {errorMessage ? <p className="signup-form__error" role="alert">{errorMessage}</p> : null}
 
-          <div className="signup-form__footer">
-            <label className="signup-terms">
-              <input
-                type="checkbox"
-                checked={hasAcceptedTerms}
-                onChange={(event) => setHasAcceptedTerms(event.target.checked)}
-              />
-              <span>
-                I agree to the <span className="signup-terms__legal">Terms</span> and{" "}
-                <span className="signup-terms__legal">Privacy Policy</span>
-              </span>
-            </label>
+            <div className="signup-form__footer">
+              <label className="signup-terms">
+                <input type="checkbox" checked={hasAcceptedTerms} onChange={(event) => setHasAcceptedTerms(event.target.checked)} />
+                <span>I agree to the <span className="signup-terms__legal">Terms</span> and <span className="signup-terms__legal">Privacy Policy</span></span>
+              </label>
+              <button type="submit" className="signup-submit" disabled={isSubmitting}>
+                {isSubmitting ? "Creating account..." : "Create account"}
+                <ArrowRight aria-hidden="true" />
+              </button>
+            </div>
+          </form>
+        ) : (
+          <ProfileEditorForm
+            accessToken={session?.access_token ?? null}
+            user={user}
+            onUserUpdated={(updatedUser) => login(updatedUser)}
+            onSaved={() => navigate("/profile", { replace: true })}
+          />
+        )}
 
-            <button type="submit" className="signup-submit" disabled={isSubmitting}>
-              {isSubmitting ? "Creating account..." : "Create account"}
-              <ArrowRight aria-hidden="true" />
-            </button>
-          </div>
-        </form>
-
-        <p className="signup-page__login">
-          Already have an account? <Link to="/login">Log in</Link>
-        </p>
+        {step === "account" ? (
+          <p className="signup-page__login">Already have an account? <Link to="/login">Log in</Link></p>
+        ) : null}
       </section>
     </div>
   );

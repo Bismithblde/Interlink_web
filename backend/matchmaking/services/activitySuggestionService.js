@@ -37,7 +37,7 @@ const clampSuggestions = (items) =>
           : undefined,
     }));
 
-const extractJson = (text) => {
+const extractJson = (text, logger) => {
   if (!text) return null;
   const firstBrace = text.indexOf("{");
   const lastBrace = text.lastIndexOf("}");
@@ -46,10 +46,7 @@ const extractJson = (text) => {
   try {
     return JSON.parse(jsonSlice);
   } catch (error) {
-    console.warn(
-      "[activitySuggestionService] Failed to parse JSON response",
-      error
-    );
+    logger?.warn("llm.response_invalid_json", { stage: "llm_parse", responseCharacterCount: text.length, error });
     return null;
   }
 };
@@ -180,7 +177,7 @@ const fallbackFromHobbies = ({ description, hobbies }) => {
   return baseIdeas;
 };
 
-const generateActivitySuggestions = async ({ description, hobbies }) => {
+const generateActivitySuggestions = async ({ description, hobbies, logger }) => {
   const normalizedHobbies = sanitizeList(hobbies);
   const trimmedDescription =
     typeof description === "string" ? description.trim() : "";
@@ -191,32 +188,48 @@ const generateActivitySuggestions = async ({ description, hobbies }) => {
     hobbies: normalizedHobbies,
   });
 
-  const response = await model.generateContent(prompt);
+  const finishCall = logger?.timer("llm.completed", { stage: "llm", provider: "gemini", model: DEFAULT_MODEL, task: "activity_suggestions" });
+  logger?.info("llm.started", {
+    stage: "llm",
+    provider: "gemini",
+    model: DEFAULT_MODEL,
+    task: "activity_suggestions",
+    input: { descriptionCharacterCount: trimmedDescription.length, hobbyCount: normalizedHobbies.length, promptCharacterCount: prompt.length },
+  });
+  let response;
+  try {
+    response = await model.generateContent(prompt);
+  } catch (error) {
+    finishCall?.({ outcome: "provider_error", error }, "error");
+    throw error;
+  }
 
   const text = response?.response?.text?.() ?? "";
-  const json = extractJson(text);
+  const json = extractJson(text, logger);
 
   if (!json || !Array.isArray(json.suggestions)) {
-    console.warn(
-      "[activitySuggestionService] Model response missing suggestions, using fallback"
-    );
-    return clampSuggestions(
+    const fallback = clampSuggestions(
       fallbackFromHobbies({
         description: trimmedDescription,
         hobbies: normalizedHobbies,
       })
     );
+    finishCall?.({ outcome: "fallback", reason: json ? "suggestions_missing" : "invalid_json", responseCharacterCount: text.length, outputCount: fallback.length }, "warn");
+    return fallback;
   }
 
   const suggestions = clampSuggestions(json.suggestions);
   if (suggestions.length === 0) {
-    return clampSuggestions(
+    const fallback = clampSuggestions(
       fallbackFromHobbies({
         description: trimmedDescription,
         hobbies: normalizedHobbies,
       })
     );
+    finishCall?.({ outcome: "fallback", reason: "no_valid_suggestions", responseCharacterCount: text.length, proposedCount: json.suggestions.length, outputCount: fallback.length }, "warn");
+    return fallback;
   }
+  finishCall?.({ outcome: "success", responseCharacterCount: text.length, proposedCount: json.suggestions.length, outputCount: suggestions.length });
   return suggestions;
 };
 
@@ -254,7 +267,7 @@ const buildHangoutPrompt = ({
 }) => {
   const focusLine = focus
     ? `Priority or vibe the group mentioned: ${focus}.`
-    : "No special focus was mentioned—suggest something energizing and welcoming.";
+    : "No special focus was mentioned - suggest something energizing and welcoming.";
   const durationLine = durationMinutes
     ? `They have about ${durationMinutes} minutes together.`
     : "Assume they have 60 minutes together unless a better cadence emerges.";
@@ -466,6 +479,7 @@ const generateHangoutPlan = async ({
   friends,
   focus,
   durationMinutes,
+  logger,
 }) => {
   const model = getModel();
   const prompt = buildHangoutPrompt({
@@ -475,16 +489,33 @@ const generateHangoutPlan = async ({
     durationMinutes,
   });
 
-  const response = await model.generateContent(prompt);
+  const finishCall = logger?.timer("llm.completed", { stage: "llm", provider: "gemini", model: DEFAULT_MODEL, task: "hangout_plan" });
+  logger?.info("llm.started", {
+    stage: "llm",
+    provider: "gemini",
+    model: DEFAULT_MODEL,
+    task: "hangout_plan",
+    input: { friendCount: friends.length, hasFocus: Boolean(focus), durationMinutes: durationMinutes || null, promptCharacterCount: prompt.length },
+  });
+  let response;
+  try {
+    response = await model.generateContent(prompt);
+  } catch (error) {
+    finishCall?.({ outcome: "provider_error", error }, "error");
+    throw error;
+  }
   const text = response?.response?.text?.() ?? "";
-  const json = extractJson(text);
+  const json = extractJson(text, logger);
 
-  return interpretHangoutPlan(json, {
+  const usedFallback = !json || typeof json.plan !== "object";
+  const plan = interpretHangoutPlan(json, {
     seeker,
     friends,
     focus,
     durationMinutes,
   });
+  finishCall?.({ outcome: usedFallback ? "fallback" : "success", reason: usedFallback ? "invalid_plan_payload" : null, responseCharacterCount: text.length, agendaItemCount: plan.agenda.length }, usedFallback ? "warn" : "info");
+  return plan;
 };
 
 module.exports = {

@@ -1,574 +1,229 @@
+const crypto = require("node:crypto");
 const { fetchMatchmakingDataset } = require("../data/profileRepository");
-const {
-  sortSlotsAscending,
-  intersectSchedules,
-  totalDurationMinutes,
-  serializeIntervals,
-  summarizeSchedule,
-} = require("../utils/scheduleUtils");
-const {
-  buildAffinityContext,
-  computeCompatibilityScore,
-  computeGroupCompatibility,
-  buildCompatibilitySummary,
-} = require("../utils/affinityUtils");
-const { getProfileVersions } = require("./profileVersionService");
-const compatibilityCache = require("./compatibilityCache");
+const { sortSlotsAscending, intersectSchedules, totalDurationMinutes, serializeIntervals, summarizeSchedule } = require("../utils/scheduleUtils");
+const { compareSchedules, normalizeMinimumOverlap } = require("../utils/bitmapSchedule");
+const { buildIdf, rankCandidate } = require("./rankingService");
+const { buildAffinityContext, computeGroupCompatibility } = require("../utils/affinityUtils");
 
 const SUPPORTED_MODES = {
-  "one-on-one": "one-on-one",
-  "1-on-1": "one-on-one",
-  one_on_one: "one-on-one",
-  "one-on-two": "one-on-two",
-  "1-on-2": "one-on-two",
-  one_on_two: "one-on-two",
-  "one-on-three": "one-on-three",
-  "1-on-3": "one-on-three",
-  one_on_three: "one-on-three",
+  "one-on-one": "one-on-one", "1-on-1": "one-on-one", one_on_one: "one-on-one",
+  "one-on-two": "one-on-two", "1-on-2": "one-on-two", one_on_two: "one-on-two",
+  "one-on-three": "one-on-three", "1-on-3": "one-on-three", one_on_three: "one-on-three",
 };
 
-const getNormalizedMode = (mode) => {
-  if (!mode) return SUPPORTED_MODES["one-on-one"];
-  const normalizedKey = `${mode}`.toLowerCase().replace(/[\s]/g, "-");
-  return SUPPORTED_MODES[normalizedKey] || SUPPORTED_MODES["one-on-one"];
-};
-
-const pickCandidateProfile = (candidate) => ({
-  id: candidate.id,
-  name: candidate.name,
-  email: candidate.email,
-  major: candidate.major,
-  graduationYear: candidate.graduationYear,
-  interests: candidate.interests,
-  bio: candidate.bio,
-  hobbies: candidate.hobbies || [],
-  classes: candidate.classes || [],
-  funFact: candidate.funFact,
-  favoriteSpot: candidate.favoriteSpot,
-  vibeCheck: candidate.vibeCheck,
-  instagram: candidate.instagram,
-});
-
-const computeSharedInterests = (seekerInterests = [], candidates) => {
-  const normalizedSeeker = new Set(
-    seekerInterests.map((interest) => interest.toLowerCase())
-  );
-  if (normalizedSeeker.size === 0) return [];
-
-  const shared = candidates
-    .flatMap((candidate) => candidate.interests || [])
-    .filter((interest) => normalizedSeeker.has(interest.toLowerCase()));
-
-  return Array.from(new Set(shared));
-};
-
-const combinations = (
-  list,
-  groupSize,
-  startIndex = 0,
-  prefix = [],
-  acc = []
-) => {
-  if (prefix.length === groupSize) {
-    acc.push(prefix.map((index) => list[index]));
-    return acc;
-  }
-
-  for (let i = startIndex; i < list.length; i += 1) {
-    combinations(list, groupSize, i + 1, [...prefix, i], acc);
-  }
-
-  return acc;
-};
-
-const sortMatches = (matches) =>
-  matches.sort((a, b) => {
-    if (
-      typeof b.compatibilityScore === "number" &&
-      typeof a.compatibilityScore === "number" &&
-      b.compatibilityScore !== a.compatibilityScore
-    ) {
-      return b.compatibilityScore - a.compatibilityScore;
-    }
-    return b.overlapMinutes - a.overlapMinutes;
-  });
-
-const buildMatchPayload = ({
-  mode,
-  seeker,
-  matches,
-  datasetSize,
-  scheduleSummary,
-  debugLog = [],
-  emptyReason = null,
-}) => ({
-  mode,
-  generatedAt: new Date().toISOString(),
-  seeker: {
-    id: seeker.id,
-    name: seeker.name,
-    interests: seeker.interests || [],
-  },
-  availabilitySummary: scheduleSummary,
-  datasetSize,
-  matches,
-  debug: debugLog,
-  emptyReason,
-});
-
-const computePairMatches = ({
-  seeker,
-  seekerSchedule,
-  candidates,
-  affinityContext,
-  debugLog,
-}) => {
-  const matches = candidates
-    .map((candidate) => {
-      const candidateSchedule = sortSlotsAscending(
-        candidate.availability || []
-      );
-      const overlappingIntervals = intersectSchedules([
-        seekerSchedule,
-        candidateSchedule,
-      ]);
-      const overlapMinutes = totalDurationMinutes(overlappingIntervals);
-
-      if (overlapMinutes <= 0) {
-        return null;
-      }
-
-      const sharedInterests = computeSharedInterests(seeker.interests, [
-        candidate,
-      ]);
-      const affinity =
-        affinityContext.candidateAffinities.get(candidate.id) || {};
-
-      debugLog.push(
-        `[matchService] candidateProfile id=${
-          candidate.id
-        } hobbies=${JSON.stringify(
-          candidate.hobbies || []
-        )} interests=${JSON.stringify(
-          candidate.interests || []
-        )} classes=${JSON.stringify(candidate.classes || [])}`
-      );
-      debugLog.push(
-        `[matchService] evaluating candidate=${
-          candidate.id
-        } overlapMinutes=${overlapMinutes} sharedInterests=${
-          sharedInterests.length
-        } sharedHobbies=${(affinity.sharedHobbies || []).length} similarity=${
-          affinity.semanticSimilarity ?? 0
-        }`
-      );
-
-      const compatibility = computeCompatibilityScore({
-        overlapMinutes,
-        affinity,
-      });
-      const clusterLabel = affinityContext.getClusterLabel(
-        affinity.clusterIndex ?? affinityContext.seekerClusterId
-      );
-
-      return {
-        matchId: `${seeker.id || "anonymous"}::${candidate.id}`,
-        participants: [pickCandidateProfile(candidate)],
-        overlapMinutes,
-        overlappingAvailability: serializeIntervals(overlappingIntervals),
-        sharedInterests,
-        sharedHobbies: affinity.sharedHobbies || [],
-        compatibilityScore: compatibility.score,
-        compatibilityBreakdown: compatibility.breakdown,
-        compatibilitySummary: buildCompatibilitySummary({
-          scheduleMinutes: overlapMinutes,
-          semanticHighlight: affinity.semanticHighlight,
-          sharedHobbies: affinity.sharedHobbies,
-          sharedInterests,
-        }),
-        clusterId: affinity.clusterId,
-        clusterLabel,
-        traitHighlights: affinity.traitHighlights || [],
-        candidateScheduleSummary: summarizeSchedule(candidateSchedule),
-        semanticSimilarity: affinity.semanticSimilarity,
-        semanticHighlight: affinity.semanticHighlight,
-      };
-    })
-    .filter(Boolean);
-
-  return sortMatches(matches).slice(0, 5);
-};
-
-const computeGroupMatches = ({
-  seeker,
-  seekerSchedule,
-  candidates,
-  groupSize = 3,
-  affinityContext,
-  debugLog,
-}) => {
-  const candidateSchedules = candidates.map((candidate) => ({
-    candidate,
-    schedule: sortSlotsAscending(candidate.availability || []),
-  }));
-
-  const candidateCombos = combinations(candidateSchedules, groupSize);
-
-  const matches = candidateCombos
-    .map((combo) => {
-      const schedules = combo.map((entry) => entry.schedule);
-      const overlappingIntervals = intersectSchedules([
-        seekerSchedule,
-        ...schedules,
-      ]);
-      const overlapMinutes = totalDurationMinutes(overlappingIntervals);
-
-      if (overlapMinutes <= 0) {
-        return null;
-      }
-
-      const participatingCandidates = combo.map((entry) => entry.candidate);
-      const groupProfiles = participatingCandidates.map(pickCandidateProfile);
-      const compatibility = computeGroupCompatibility({
-        overlapMinutes,
-        participants: groupProfiles,
-        affinityContext,
-      });
-
-      debugLog.push(
-        `[matchService] group combo overlapMinutes=${overlapMinutes} sharedInterests=${compatibility.sharedInterests.length} sharedHobbies=${compatibility.sharedHobbies.length} score=${compatibility.score}`
-      );
-      const sharedInterests =
-        compatibility.sharedInterests && compatibility.sharedInterests.length
-          ? compatibility.sharedInterests
-          : computeSharedInterests(seeker.interests, participatingCandidates);
-
-      return {
-        matchId: `${seeker.id || "anonymous"}::group::${participatingCandidates
-          .map((candidate) => candidate.id)
-          .join("+")}`,
-        participants: groupProfiles,
-        overlapMinutes,
-        overlappingAvailability: serializeIntervals(overlappingIntervals),
-        sharedInterests,
-        sharedHobbies: compatibility.sharedHobbies,
-        compatibilityScore: compatibility.score,
-        compatibilityBreakdown: compatibility.breakdown,
-        compatibilitySummary: compatibility.summary,
-        clusterLabel:
-          compatibility.clusterLabels && compatibility.clusterLabels.length
-            ? compatibility.clusterLabels.join(" • ")
-            : affinityContext.getClusterLabel(affinityContext.seekerClusterId),
-        traitHighlights: participatingCandidates.flatMap((candidate) => {
-          const affinity = affinityContext.candidateAffinities.get(
-            candidate.id
-          );
-          return affinity?.traitHighlights || [];
-        }),
-        candidateScheduleSummaries: participatingCandidates.map(
-          (candidate, idx) => ({
-            candidateId: candidate.id,
-            summary: summarizeSchedule(combo[idx].schedule),
-          })
-        ),
-        semanticSimilarity: compatibility.breakdown.affinity,
-        semanticHighlight: compatibility.semanticHighlight,
-      };
-    })
-    .filter(Boolean);
-
-  return sortMatches(matches).slice(0, 5);
-};
-
-/**
- * Naive matchmaking implementation used to unlock frontend work. Once the
- * production schedule ingestion pipeline lands we should replace this with a
- * persistence-backed service.
- */
-const mergeArrays = (...arrays) =>
-  Array.from(
-    new Set(
-      arrays
-        .filter(Array.isArray)
-        .flat()
-        .map((value) => `${value}`.trim())
-        .filter((value) => value.length > 0)
-    )
-  );
+const normalizedMode = (mode) => SUPPORTED_MODES[`${mode || "one-on-one"}`.toLowerCase().replace(/\s/g, "-")] || "one-on-one";
+const unique = (...arrays) => [...new Set(arrays.filter(Array.isArray).flat().map((value) => `${value}`.trim()).filter(Boolean))];
 
 const mergeSeekerProfile = (incoming = {}, persisted = {}) => ({
-  id: incoming.id || persisted.id,
-  name: incoming.name || persisted.name,
-  email: incoming.email || persisted.email,
-  interests: mergeArrays(persisted.interests, incoming.interests),
-  hobbies: mergeArrays(persisted.hobbies, incoming.hobbies),
-  classes: mergeArrays(persisted.classes, incoming.classes),
-  major: incoming.major || persisted.major,
-  graduationYear: incoming.graduationYear || persisted.graduationYear,
-  instagram: incoming.instagram || persisted.instagram,
-  bio: incoming.bio || persisted.bio,
-  funFact: incoming.funFact || persisted.funFact,
-  favoriteSpot: incoming.favoriteSpot || persisted.favoriteSpot,
-  vibeCheck: incoming.vibeCheck || persisted.vibeCheck,
+  ...persisted, ...incoming,
+  interests: unique(persisted.interests, incoming.interests), hobbies: unique(persisted.hobbies, incoming.hobbies),
+  classes: unique(persisted.classes, incoming.classes), tags: unique(persisted.tags, incoming.tags),
+  openTo: unique(persisted.openTo, incoming.openTo),
 });
 
-const findMatches = async ({ seeker, availability, mode, filters = {} }) => {
-  if (
-    !availability ||
-    !Array.isArray(availability) ||
-    availability.length === 0
-  ) {
-    throw new Error("availability must be a non-empty array of time slots");
-  }
+const pickCandidateProfile = (candidate) => ({
+  id: candidate.id, name: candidate.name, email: candidate.email, major: candidate.major,
+  graduationYear: candidate.graduationYear, interests: candidate.interests || [], hobbies: candidate.hobbies || [],
+  classes: candidate.classes || [], tags: candidate.tags || [], openTo: candidate.openTo || [], bio: candidate.bio,
+  funFact: candidate.funFact, favoriteSpot: candidate.favoriteSpot, vibeCheck: candidate.vibeCheck,
+  instagram: candidate.instagram, avatarUrl: candidate.avatarUrl,
+});
 
-  const normalizedMode = getNormalizedMode(mode);
-  const seekerSchedule = sortSlotsAscending(availability);
-  const debugLog = [
-    `[matchService] seeker=${seeker?.id || "anonymous"} slots=${
-      availability.length
-    } mode=${normalizedMode}`,
-  ];
+const evaluateFilters = (candidate, filters = {}) => {
+  const includesAny = (source, wanted) => !wanted?.length || wanted.some((item) => (source || []).some((value) => `${value}`.toLowerCase() === `${item}`.toLowerCase()));
+  const rejectionReasons = [];
+  if (!includesAny(candidate.interests, filters.interests)) rejectionReasons.push("interests");
+  if (filters.majors?.length && !filters.majors.includes(candidate.major)) rejectionReasons.push("major");
+  if (!includesAny(candidate.classes, filters.classes)) rejectionReasons.push("classes");
+  if (filters.hobbyQuery && !(candidate.hobbies || []).some((value) => value.toLowerCase().includes(filters.hobbyQuery.toLowerCase()))) rejectionReasons.push("hobby_query");
+  return { accepted: rejectionReasons.length === 0, rejectionReasons };
+};
 
-  const dataset = await fetchMatchmakingDataset({
-    seekerId: seeker?.id,
+const applyFilters = (candidates, filters = {}, logger) => {
+  const accepted = [];
+  const rejectionCounts = {};
+  candidates.forEach((candidate) => {
+    const decision = evaluateFilters(candidate, filters);
+    logger?.debug("candidate.filter_evaluated", {
+      stage: "filtering",
+      candidateId: candidate.id,
+      accepted: decision.accepted,
+      rejectionReasons: decision.rejectionReasons,
+    });
+    if (decision.accepted) accepted.push(candidate);
+    else decision.rejectionReasons.forEach((reason) => { rejectionCounts[reason] = (rejectionCounts[reason] || 0) + 1; });
   });
+  logger?.info("candidates.filtered", {
+    stage: "filtering",
+    inputCount: candidates.length,
+    acceptedCount: accepted.length,
+    rejectedCount: candidates.length - accepted.length,
+    rejectionCounts,
+    activeFilterKeys: Object.keys(filters),
+  });
+  return accepted;
+};
 
-  debugLog.push(
-    `[matchService] dataSource=${
-      dataset.usesSampleData ? "sample-dataset" : "supabase"
-    } candidates=${dataset.candidates.length}`
-  );
+const combinations = (list, size, start = 0, prefix = [], result = []) => {
+  if (prefix.length === size) { result.push(prefix); return result; }
+  for (let index = start; index < list.length; index += 1) combinations(list, size, index + 1, [...prefix, list[index]], result);
+  return result;
+};
 
+const diversifyMatches = (matches, limit = 5, logger) => {
+  const remaining = [...matches];
+  const selected = [];
+  while (remaining.length && selected.length < limit) {
+    let bestIndex = 0;
+    let bestAdjusted = -Infinity;
+    remaining.forEach((match, index) => {
+      const tags = new Set(match.participants?.[0]?.tags || []);
+      const maximumSimilarity = selected.reduce((maximum, chosen) => {
+        const other = new Set(chosen.participants?.[0]?.tags || []);
+        const union = new Set([...tags, ...other]);
+        const intersection = [...tags].filter((tag) => other.has(tag)).length;
+        return Math.max(maximum, union.size ? intersection / union.size : 0);
+      }, 0);
+      const adjusted = match.rankScore - maximumSimilarity * 0.06;
+      if (adjusted > bestAdjusted) { bestAdjusted = adjusted; bestIndex = index; }
+    });
+    const chosen = remaining.splice(bestIndex, 1)[0];
+    selected.push(chosen);
+    logger?.debug("candidate.diversification_selected", {
+      stage: "diversification",
+      position: selected.length,
+      candidateId: chosen.participants?.[0]?.id,
+      rawRankScore: chosen.rankScore,
+      adjustedRankScore: Number(bestAdjusted.toFixed(4)),
+    });
+  }
+  logger?.info("matches.diversified", { stage: "diversification", inputCount: matches.length, outputCount: selected.length });
+  return selected;
+};
+
+const pairMatches = ({ seeker, availability, candidates, intent, minimum, requestId, debug, logger }) => {
+  const allProfiles = [seeker, ...candidates];
+  const idf = buildIdf(allProfiles);
+  logger?.debug("ranking.idf_built", { stage: "ranking", profileCount: allProfiles.length, uniqueTagCount: idf.size });
+  const ranked = candidates.map((candidate) => {
+  const schedule = candidate.availability || [];
+  const bitmapOverlap = compareSchedules([availability, schedule]);
+  if (bitmapOverlap.longestOverlapMinutes < minimum) {
+    logger?.debug("candidate.schedule_rejected", {
+      stage: "schedule",
+      candidateId: candidate.id,
+      candidateSlotCount: schedule.length,
+      overlapMinutes: bitmapOverlap.overlapMinutes,
+      longestOverlapMinutes: bitmapOverlap.longestOverlapMinutes,
+      requiredLongestOverlapMinutes: minimum,
+    });
+    return null;
+  }
+  const rank = rankCandidate({ viewer: seeker, candidate, allProfiles, idf, intent, requestId });
+  const intervals = intersectSchedules([sortSlotsAscending(availability), sortSlotsAscending(schedule)]);
+  const intervalMinutes = totalDurationMinutes(intervals);
+  debug.push(`[matchService] candidate=${candidate.id} longestOverlap=${bitmapOverlap.longestOverlapMinutes} affinity=${rank.profileAffinity} reciprocal=${rank.reciprocalAffinity}`);
+  logger?.debug("candidate.ranked", {
+    stage: "ranking",
+    candidateId: candidate.id,
+    schedule: {
+      candidateSlotCount: schedule.length,
+      overlapMinutes: bitmapOverlap.overlapMinutes,
+      longestOverlapMinutes: bitmapOverlap.longestOverlapMinutes,
+    },
+    scores: {
+      profileAffinity: rank.profileAffinity,
+      reciprocalAffinity: rank.reciprocalAffinity,
+      graphScore: rank.graphScore,
+      confidence: rank.confidence,
+      finalScore: rank.finalScore,
+    },
+    diagnostics: rank.diagnostics,
+    sharedTags: rank.sharedTags,
+    isExploration: rank.isExploration,
+  });
+  return {
+    matchId: `${seeker.id || "anonymous"}::${candidate.id}`, requestId, matchVersion: "2.0", version: "2.0",
+    participants: [pickCandidateProfile(candidate)], overlapMinutes: bitmapOverlap.overlapMinutes,
+    longestOverlapMinutes: bitmapOverlap.longestOverlapMinutes,
+    overlappingAvailability: serializeIntervals(intervals),
+    sharedInterests: (seeker.interests || []).filter((item) => (candidate.interests || []).some((other) => other.toLowerCase() === item.toLowerCase())),
+    sharedHobbies: (seeker.hobbies || []).filter((item) => (candidate.hobbies || []).some((other) => other.toLowerCase() === item.toLowerCase())),
+    sharedTags: rank.sharedTags, profileAffinity: rank.profileAffinity, reciprocalAffinity: rank.reciprocalAffinity,
+    affinity: rank.profileAffinity, reciprocal: rank.reciprocalAffinity,
+    graphScore: rank.graphScore, confidence: rank.confidence, isExploration: rank.isExploration, exploration: rank.isExploration,
+    explanations: rank.explanations, compatibilityScore: Math.round(45 + rank.finalScore * 54),
+    compatibilityBreakdown: { schedule: 1, affinity: rank.profileAffinity, reciprocal: rank.reciprocalAffinity, graph: rank.graphScore },
+    compatibilitySummary: `${bitmapOverlap.longestOverlapMinutes} consecutive shared minutes - ${rank.explanations[0]}`,
+    candidateScheduleSummary: summarizeSchedule(sortSlotsAscending(schedule)),
+    semanticSimilarity: rank.profileAffinity, semanticHighlight: rank.explanations[0],
+    rankScore: rank.finalScore, rawIntervalOverlapMinutes: intervalMinutes,
+  };
+  }).filter(Boolean).sort((a, b) => b.rankScore - a.rankScore || b.longestOverlapMinutes - a.longestOverlapMinutes || a.participants[0].id.localeCompare(b.participants[0].id));
+  logger?.info("candidates.ranked", {
+    stage: "ranking",
+    inputCount: candidates.length,
+    scheduleEligibleCount: ranked.length,
+    scheduleRejectedCount: candidates.length - ranked.length,
+    topCandidates: ranked.slice(0, 10).map((match) => ({ candidateId: match.participants[0].id, rankScore: match.rankScore })),
+  });
+  return diversifyMatches(ranked, 5, logger);
+};
+
+const groupMatches = async ({ seeker, availability, candidates, mode, minimum, requestId, debug, logger }) => {
+  const size = mode === "one-on-two" ? 2 : 3;
+  const finishAffinity = logger?.timer("group.affinity_context_built", { stage: "ranking", candidateCount: candidates.length });
+  const affinityContext = await buildAffinityContext({ seeker, candidates, logger });
+  finishAffinity?.({ outcome: "success" });
+  const groups = combinations(candidates, size);
+  logger?.info("groups.generated", { stage: "grouping", groupSize: size, combinationCount: groups.length });
+  const eligibleMatches = groups.map((group) => {
+    const overlap = compareSchedules([availability, ...group.map((candidate) => candidate.availability || [])]);
+    if (overlap.longestOverlapMinutes < minimum) {
+      logger?.debug("group.schedule_rejected", { stage: "schedule", candidateIds: group.map((candidate) => candidate.id), longestOverlapMinutes: overlap.longestOverlapMinutes, requiredLongestOverlapMinutes: minimum });
+      return null;
+    }
+    const intervals = intersectSchedules([sortSlotsAscending(availability), ...group.map((candidate) => sortSlotsAscending(candidate.availability || []))]);
+    const compatibility = computeGroupCompatibility({ overlapMinutes: overlap.overlapMinutes, participants: group, affinityContext, minimumOverlapTarget: minimum });
+    debug.push(`[matchService] group=${group.map((candidate) => candidate.id).join("+")} longestOverlap=${overlap.longestOverlapMinutes}`);
+    logger?.debug("group.ranked", { stage: "ranking", candidateIds: group.map((candidate) => candidate.id), longestOverlapMinutes: overlap.longestOverlapMinutes, compatibilityScore: compatibility.score, breakdown: compatibility.breakdown });
+    return {
+      matchId: `${seeker.id || "anonymous"}::group::${group.map((candidate) => candidate.id).join("+")}`,
+      requestId, matchVersion: "2.0", version: "2.0", participants: group.map(pickCandidateProfile), overlapMinutes: overlap.overlapMinutes,
+      longestOverlapMinutes: overlap.longestOverlapMinutes, overlappingAvailability: serializeIntervals(intervals),
+      sharedInterests: compatibility.sharedInterests, sharedHobbies: compatibility.sharedHobbies, sharedTags: [],
+      compatibilityScore: compatibility.score, compatibilityBreakdown: compatibility.breakdown,
+      compatibilitySummary: compatibility.summary, confidence: 0.5, explanations: ["Everyone has a consecutive shared availability block"],
+      isExploration: false, profileAffinity: compatibility.breakdown.affinity, reciprocalAffinity: compatibility.breakdown.affinity, graphScore: 0,
+      exploration: false, affinity: compatibility.breakdown.affinity, reciprocal: compatibility.breakdown.affinity,
+    };
+  }).filter(Boolean).sort((a, b) => b.compatibilityScore - a.compatibilityScore);
+  const matches = eligibleMatches.slice(0, 5);
+  logger?.info("groups.ranked", { stage: "ranking", inputCount: groups.length, eligibleCount: eligibleMatches.length, returnedCount: matches.length });
+  return matches;
+};
+
+const findMatches = async ({ seeker = {}, availability, mode, filters = {}, intent, minOverlapMinutes, requestId = crypto.randomUUID(), logger }) => {
+  if (!Array.isArray(availability) || !availability.length) throw new Error("availability must be a non-empty array of time slots");
+  const minimum = normalizeMinimumOverlap(minOverlapMinutes);
+  const requestedMode = normalizedMode(mode);
+  logger?.info("pipeline.started", { stage: "pipeline", matchVersion: "2.0", requestedMode, minimumOverlapMinutes: minimum });
+  const dataset = await fetchMatchmakingDataset({ seekerId: seeker.id, logger });
   const mergedSeeker = mergeSeekerProfile(seeker, dataset.seekerProfile || {});
-  debugLog.push(
-    `[matchService] mergedSeeker interests=${JSON.stringify(
-      mergedSeeker.interests || []
-    )} hobbies=${JSON.stringify(
-      mergedSeeker.hobbies || []
-    )} classes=${JSON.stringify(mergedSeeker.classes || [])}`
-  );
-
-  const filteredCandidates = dataset.candidates.filter((candidate) => {
-    if (!filters || Object.keys(filters).length === 0) return true;
-
-    if (filters.interests && filters.interests.length) {
-      const candidateInterests = candidate.interests || [];
-      const matchesInterest = filters.interests.some((interest) =>
-        candidateInterests
-          .map((value) => value.toLowerCase())
-          .includes(interest.toLowerCase())
-      );
-      if (!matchesInterest) return false;
-    }
-
-    if (filters.majors && filters.majors.length) {
-      if (!candidate.major || !filters.majors.includes(candidate.major)) {
-        return false;
-      }
-    }
-
-    if (Array.isArray(filters.classes) && filters.classes.length) {
-      const candidateClasses = (candidate.classes || []).map((course) =>
-        `${course}`.toLowerCase()
-      );
-      const matchesCourse = filters.classes.some((course) =>
-        candidateClasses.includes(`${course}`.toLowerCase())
-      );
-      if (!matchesCourse) {
-        return false;
-      }
-    }
-
-    return true;
-  });
-
-  debugLog.push(
-    `[matchService] filteredCandidates=${filteredCandidates.length} totalCandidates=${dataset.totalCandidates}`
-  );
-
-  if (filters.requireSameCourse) {
-    debugLog.push(
-      `[matchService] requireSameCourse active with courses=${JSON.stringify(
-        filters.classes || []
-      )}`
-    );
-  }
-
-  let candidatesToEvaluate = filteredCandidates;
-  const hobbyQuery =
-    filters && typeof filters.hobbyQuery === "string"
-      ? filters.hobbyQuery.toLowerCase()
-      : null;
-
-  if (hobbyQuery) {
-    candidatesToEvaluate = filteredCandidates.filter((candidate) =>
-      (candidate.hobbies || []).some((hobby) =>
-        hobby.toLowerCase().includes(hobbyQuery)
-      )
-    );
-    debugLog.push(
-      `[matchService] hobbyQuery=${hobbyQuery} filtered=${candidatesToEvaluate.length}`
-    );
-  }
-
-  const scheduleSummary = summarizeSchedule(seekerSchedule);
-
-  let emptyReason = null;
-
-  const seekerId = mergedSeeker?.id || null;
-  let profileVersions = new Map();
-  let validCacheEntries = [];
-  let candidatesToRecompute = candidatesToEvaluate;
-
-  if (
-    normalizedMode === "one-on-one" &&
-    compatibilityCache.isEnabled() &&
-    !dataset.usesSampleData &&
-    seekerId
-  ) {
-    const candidateIds = candidatesToEvaluate.map((c) => c.id);
-    profileVersions = await getProfileVersions([seekerId, ...candidateIds]);
-    const seekerVersion = profileVersions.get(seekerId) ?? null;
-    const cached = await compatibilityCache.getTopK(seekerId);
-    validCacheEntries = (cached || []).filter(
-      (e) =>
-        e.candidateId &&
-        e.seekerVersion === seekerVersion &&
-        e.candidateVersion === profileVersions.get(e.candidateId) &&
-        candidateIds.includes(e.candidateId)
-    );
-    candidatesToRecompute = candidatesToEvaluate.filter(
-      (c) => !validCacheEntries.some((e) => e.candidateId === c.id)
-    );
-    debugLog.push(
-      `[matchService] compatibilityCache valid=${validCacheEntries.length} toRecompute=${candidatesToRecompute.length}`
-    );
-  }
-
-  const affinityContext = await buildAffinityContext({
-    seeker: mergedSeeker,
-    candidates: candidatesToEvaluate,
-  });
-
-  debugLog.push(
-    `[matchService] affinity strategy=${affinityContext.metadata.similarityStrategy} assignments=${affinityContext.metadata.assignments}`.replace(
-      /\s+/g,
-      " "
-    )
-  );
-
-  if (["one-on-two", "one-on-three"].includes(normalizedMode)) {
-    const groupSize = normalizedMode === "one-on-two" ? 2 : 3;
-    if (candidatesToEvaluate.length < groupSize) {
-      emptyReason = "Not enough candidates available to form a group pod yet.";
-      debugLog.push(
-        `[matchService] insufficient candidates for ${normalizedMode} matching`
-      );
-      return buildMatchPayload({
-        mode: normalizedMode,
-        seeker: mergedSeeker,
-        matches: [],
-        datasetSize: dataset.totalCandidates,
-        scheduleSummary,
-        debugLog,
-        emptyReason,
-      });
-    }
-
-    const matches = computeGroupMatches({
-      seeker: mergedSeeker,
-      seekerSchedule,
-      candidates: candidatesToEvaluate,
-      groupSize,
-      affinityContext,
-      debugLog,
-    });
-
-    if (matches.length === 0) {
-      emptyReason =
-        "We couldn't find a shared time block with enough people for a pod yet.";
-      debugLog.push("[matchService] group matching produced zero results");
-    }
-
-    console.debug("[matchService] group matches summary", {
-      seeker: mergedSeeker?.id || "anonymous",
-      matchCount: matches.length,
-      debugLog,
-    });
-
-    return buildMatchPayload({
-      mode: normalizedMode,
-      seeker: mergedSeeker,
-      matches,
-      datasetSize: dataset.totalCandidates,
-      scheduleSummary,
-      debugLog,
-      emptyReason,
-    });
-  }
-
-  const newMatches = computePairMatches({
-    seeker: mergedSeeker,
-    seekerSchedule,
-    candidates: candidatesToRecompute,
-    affinityContext,
-    debugLog,
-  });
-
-  const matches =
-    validCacheEntries.length > 0
-      ? sortMatches([
-          ...validCacheEntries.map((e) => e.matchPayload),
-          ...newMatches,
-        ]).slice(0, 5)
-      : newMatches;
-
-  if (matches.length === 0) {
-    emptyReason = candidatesToEvaluate.length
-      ? "No overlapping schedule blocks with the current filters. Try widening your availability or filters."
-      : "No candidates match your current filters yet.";
-    debugLog.push("[matchService] pair matching produced zero results");
-  }
-
-  if (
-    compatibilityCache.isEnabled() &&
-    !dataset.usesSampleData &&
-    seekerId &&
-    profileVersions.size > 0
-  ) {
-    const seekerVersion = profileVersions.get(seekerId) ?? null;
-    const topKSize = compatibilityCache.getTopKSize();
-    const cacheEntries = matches
-      .slice(0, topKSize)
-      .filter((m) => m.participants?.[0]?.id)
-      .map((m) => ({
-        candidateId: m.participants[0].id,
-        seekerVersion,
-        candidateVersion: profileVersions.get(m.participants[0].id) ?? null,
-        matchPayload: m,
-      }));
-    compatibilityCache.setTopK(seekerId, cacheEntries).catch((err) => {
-      console.warn("[matchService] setTopK failed", err?.message);
-    });
-  }
-
-  console.debug("[matchService] pair matches summary", {
-    seeker: mergedSeeker?.id || "anonymous",
-    matchCount: matches.length,
-    debugLog,
-  });
-
-  return buildMatchPayload({
-    mode: normalizedMode,
-    seeker: mergedSeeker,
-    matches,
-    datasetSize: dataset.totalCandidates,
-    scheduleSummary,
-    debugLog,
-    emptyReason,
-  });
+  logger?.debug("seeker.merged", { stage: "profile", seekerId: mergedSeeker.id || null, signalCounts: { interests: mergedSeeker.interests.length, hobbies: mergedSeeker.hobbies.length, classes: mergedSeeker.classes.length, tags: mergedSeeker.tags.length, openTo: mergedSeeker.openTo.length }, persistedProfileFound: Boolean(dataset.seekerProfile) });
+  const candidates = applyFilters(dataset.candidates, filters, logger);
+  const debug = [`[matchService] request=${requestId} version=2.0 mode=${requestedMode} minOverlap=${minimum}`, `[matchService] dataSource=${dataset.usesSampleData ? "sample-dataset" : "supabase"} candidates=${candidates.length}`];
+  const matches = requestedMode === "one-on-one"
+    ? pairMatches({ seeker: mergedSeeker, availability, candidates, intent, minimum, requestId, debug, logger })
+    : await groupMatches({ seeker: mergedSeeker, availability, candidates, mode: requestedMode, minimum, requestId, debug, logger });
+  logger?.info("pipeline.completed", { stage: "pipeline", outcome: matches.length ? "matches_found" : "no_matches", datasetSize: dataset.totalCandidates, filteredCandidateCount: candidates.length, matchCount: matches.length });
+  return {
+    requestId, matchVersion: "2.0", version: "2.0", mode: requestedMode, generatedAt: new Date().toISOString(),
+    seeker: { id: mergedSeeker.id, name: mergedSeeker.name, interests: mergedSeeker.interests || [] },
+    availabilitySummary: { ...summarizeSchedule(sortSlotsAscending(availability)), minimumConsecutiveMinutes: minimum },
+    datasetSize: dataset.totalCandidates, matches, debug,
+    emptyReason: matches.length ? null : `No profiles have at least ${minimum} consecutive shared minutes with these filters.`,
+  };
 };
 
-module.exports = {
-  findMatches,
-};
+module.exports = { findMatches };

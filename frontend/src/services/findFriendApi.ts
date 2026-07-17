@@ -1,4 +1,5 @@
 import type { SerializedFreeTimeSlot } from "../types/schedule";
+import type { ProfileIntent } from "../types/user";
 import { API_BASE_URL } from "./apiConfig";
 
 export type MatchMode = "ONE_ON_ONE" | "ONE_ON_TWO" | "ONE_ON_THREE";
@@ -9,6 +10,7 @@ export type MatchRequestPayload = {
   mode: MatchMode;
   window: MatchWindow;
   minOverlapMinutes: number;
+  intent?: ProfileIntent;
   requireSameCourse: boolean;
   slots: SerializedFreeTimeSlot[];
   hobbyQuery?: string;
@@ -24,6 +26,7 @@ export type MatchRequestPayload = {
     vibeCheck?: string | null;
     bio?: string | null;
     instagram?: string | null;
+    openTo?: ProfileIntent[];
   };
 };
 
@@ -36,9 +39,11 @@ export type MatchAvailabilitySlot = {
 export type CompatibilityBreakdown = {
   schedule: number;
   affinity: number;
-  hobbies: number;
-  interests: number;
-  majorBonus: number;
+  reciprocal?: number;
+  graph?: number;
+  hobbies?: number;
+  interests?: number;
+  majorBonus?: number;
 };
 
 export type MatchPreview = {
@@ -70,6 +75,35 @@ export type MatchPreview = {
   vibeHighlights?: string[];
   semanticSimilarity?: number;
   semanticHighlight?: string;
+  requestId?: string;
+  version?: string | number;
+  reciprocalAffinity?: number;
+  profileAffinity?: number;
+  confidence?: number;
+  sharedTags?: string[];
+  graphScore?: number;
+  longestOverlapMinutes?: number;
+  isExploration?: boolean;
+  explanations?: string[];
+};
+
+export type RecommendationEventType =
+  | "impression"
+  | "profile_open"
+  | "dwell"
+  | "skip"
+  | "request"
+  | "accept"
+  | "reciprocal_action";
+
+export type RecommendationEvent = {
+  type: RecommendationEventType;
+  candidateId: string;
+  requestId: string;
+  matchVersion?: string;
+  occurredAt?: string;
+  dwellSeconds?: number;
+  metadata?: Record<string, unknown>;
 };
 
 class MatchmakingApiError extends Error {
@@ -127,6 +161,16 @@ type MatchmakingResponse = {
     traitHighlights?: string[];
     semanticSimilarity?: number;
     semanticHighlight?: string;
+    requestId?: string;
+    version?: string | number;
+    reciprocalAffinity?: number;
+    profileAffinity?: number;
+    confidence?: number;
+    sharedTags?: string[];
+    graphScore?: number;
+    longestOverlapMinutes?: number;
+    isExploration?: boolean;
+    explanations?: string[];
   }>;
 };
 
@@ -374,16 +418,17 @@ const sanitizeUser = (user: MatchRequestPayload["user"]) => {
     vibeCheck: sanitizeTextField(user.vibeCheck),
     bio: sanitizeTextField(user.bio),
     instagram: sanitizeInstagram(user.instagram),
+    openTo: Array.isArray(user.openTo)
+      ? user.openTo.filter((value): value is ProfileIntent =>
+          ["new-friends", "study-buddy", "project-partner", "casual-hangout"].includes(value)
+        )
+      : undefined,
   };
 };
 
 const buildFilters = (payload: MatchRequestPayload) => {
   const filters: Record<string, unknown> = {};
   const normalizedUser = sanitizeUser(payload.user);
-
-  if (payload.requireSameCourse && normalizedUser?.major) {
-    filters.majors = [normalizedUser.major];
-  }
 
   if (
     payload.requireSameCourse &&
@@ -460,6 +505,16 @@ const transformMatches = (
           ? Number(match.semanticSimilarity)
           : undefined,
       semanticHighlight: match.semanticHighlight,
+      requestId: match.requestId,
+      version: match.version,
+      reciprocalAffinity: match.reciprocalAffinity,
+      profileAffinity: match.profileAffinity,
+      confidence: match.confidence,
+      sharedTags: match.sharedTags,
+      graphScore: match.graphScore,
+      longestOverlapMinutes: match.longestOverlapMinutes,
+      isExploration: match.isExploration,
+      explanations: match.explanations,
     };
   });
 };
@@ -479,6 +534,8 @@ export const findFriendApi = {
       user: sanitizeUser(payload.user),
       availability: payload.slots,
       mode: MATCH_MODE_TO_BACKEND[payload.mode],
+      intent: payload.intent,
+      minOverlapMinutes: payload.minOverlapMinutes,
       filters: buildFilters(payload),
     };
 
@@ -559,6 +616,20 @@ export const findFriendApi = {
       plan: response.plan,
       generatedAt: response.generatedAt ?? new Date().toISOString(),
     };
+  },
+
+  async recordEvents(events: RecommendationEvent[], accessToken: string) {
+    if (events.length === 0) return { accepted: 0 };
+    return request<{ accepted: number }>("/matchmaking/events", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({
+        events: events.map((event) => ({
+          ...event,
+          occurredAt: event.occurredAt ?? new Date().toISOString(),
+        })),
+      }),
+    });
   },
 };
 

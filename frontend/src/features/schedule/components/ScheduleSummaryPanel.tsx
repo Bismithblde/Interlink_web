@@ -1,77 +1,82 @@
-import type { SerializedFreeTimeSlot } from "../../../types/schedule";
-
 type SummaryItem = {
   id: string;
   day: string;
   start: string;
   end: string;
+  color?: string;
   durationMinutes: number;
 };
 
 type Props = {
   scheduleSummary: SummaryItem[];
-  serializedSlots: SerializedFreeTimeSlot[];
   onClearSchedule: () => void;
+};
+
+const formatDuration = (minutes: number) => {
+  const hours = minutes / 60;
+  return Number.isInteger(hours) ? `${hours}` : hours.toFixed(1);
 };
 
 const ScheduleSummaryPanel = ({
   scheduleSummary,
-  serializedSlots,
   onClearSchedule,
 }: Props) => {
   const hasSlots = scheduleSummary.length > 0;
+  const totalMinutes = scheduleSummary.reduce(
+    (total, slot) => total + slot.durationMinutes,
+    0,
+  );
+  const openHoursLabel = totalMinutes === 60 ? "open hour" : "open hours";
 
   return (
-    <div className="flex w-full max-w-sm flex-col gap-4 self-start rounded-3xl border border-slate-700 bg-slate-900/70 p-5 text-left text-sm text-slate-200 shadow-inner shadow-slate-950/40 lg:w-80 lg:shrink-0">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-100">
-          Saved Slots
-        </span>
+    <aside className="schedule-summary" aria-labelledby="saved-times-title">
+      <header className="schedule-summary__header">
+        <div>
+          <h2 id="saved-times-title" className="landing-display">
+            Saved times
+          </h2>
+          <p>
+            {scheduleSummary.length}{" "}
+            {scheduleSummary.length === 1 ? "window" : "windows"}
+            {hasSlots
+              ? ` - ${formatDuration(totalMinutes)} ${openHoursLabel}`
+              : ""}
+          </p>
+        </div>
         <button
           type="button"
           onClick={onClearSchedule}
           disabled={!hasSlots}
-          className="rounded-full border border-rose-500/50 px-3 py-1 text-xs font-semibold text-rose-300 transition hover:border-rose-400 hover:bg-rose-900/30 disabled:cursor-not-allowed disabled:border-slate-700 disabled:text-slate-500"
+          className="schedule-summary__clear"
         >
           Clear all
         </button>
-      </div>
+      </header>
 
       {hasSlots ? (
-        <ul className="flex flex-col gap-3">
+        <ul className="schedule-summary__list">
           {scheduleSummary.map((slot) => (
-            <li
-              key={slot.id}
-              className="rounded-2xl border border-slate-700 bg-slate-900/70 px-4 py-3 shadow-sm shadow-slate-950/30"
-            >
-              <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.3em] text-slate-100">
-                <span>{slot.day}</span>
-                <span>{slot.durationMinutes} min</span>
-              </div>
-              <div className="mt-1 text-base font-medium text-slate-100">
-                {slot.start} – {slot.end}
-              </div>
+            <li key={slot.id}>
+              <span
+                className="schedule-summary__color"
+                style={{ backgroundColor: slot.color ?? "#e7ad4b" }}
+                aria-hidden="true"
+              />
+              <span className="schedule-summary__day">{slot.day}</span>
+              <span className="schedule-summary__time">
+                {slot.start} - {slot.end}
+              </span>
             </li>
           ))}
         </ul>
       ) : (
-        <p className="rounded-2xl border border-dashed border-slate-600 bg-slate-900/60 px-4 py-6 text-center text-sm text-slate-300">
-          Click and drag on the calendar to mark when you&apos;re free. Slots
-          will appear here and stay synced to your account.
-        </p>
+        <div className="schedule-summary__empty">
+          <p>Drag across the calendar to add the times you are free.</p>
+        </div>
       )}
 
-      <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4">
-        <div className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-100">
-          Data Structure
-        </div>
-        <pre className="mt-2 max-h-40 overflow-auto rounded-xl bg-slate-950 p-3 font-mono text-xs leading-5 text-slate-200">
-          {JSON.stringify(serializedSlots, null, 2)}
-        </pre>
-      </div>
-    </div>
+    </aside>
   );
 };
 
 export default ScheduleSummaryPanel;
-

@@ -28,6 +28,7 @@ import {
 import { scheduleApi, ScheduleApiError } from "../services/scheduleApi";
 import { deserializeSlots, serializeSlots } from "../features/schedule/utils";
 import type { FreeTimeSlot } from "../types/schedule";
+import type { ProfileIntent } from "../types/user";
 import {
   ConnectionsApiError,
   connectionsApi,
@@ -151,6 +152,15 @@ const sanitizeClasses = (value: unknown): string[] | undefined => {
   return Array.isArray(list) && list.length > 0 ? list : undefined;
 };
 
+const sanitizeOpenTo = (value: unknown): ProfileIntent[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const allowed: ProfileIntent[] = ["new-friends", "study-buddy", "project-partner", "casual-hangout"];
+  const intents = value.filter((entry): entry is ProfileIntent =>
+    allowed.includes(entry as ProfileIntent)
+  );
+  return intents.length > 0 ? intents : undefined;
+};
+
 const sanitizeInstagramHandle = (value: unknown): string | undefined => {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
@@ -170,12 +180,14 @@ type ConnectionStatus = "idle" | "sending" | "sent" | "error";
 
 const FindFriend = () => {
   const { user, session } = useAuth();
+  const accessToken = session?.access_token ?? null;
 
   const [matchMode, setMatchMode] = useState<MatchMode>("ONE_ON_ONE");
   const [preferences, setPreferences] = useState<MatchPreferences>({
     window: "NEXT_7_DAYS",
     minOverlapMinutes: 60,
     requireSameCourse: false,
+    intent: "new-friends",
   });
   const [storedSlots, setStoredSlots] = useState<FreeTimeSlot[]>([]);
   const [isLoadingSchedule, setIsLoadingSchedule] = useState(false);
@@ -308,6 +320,7 @@ const FindFriend = () => {
           (metadata as Record<string, unknown>).instagramHandle ??
           (metadata as Record<string, unknown>).socialInstagram
       ),
+      openTo: sanitizeOpenTo(metadata.openTo),
     };
   }, [user]);
 
@@ -331,6 +344,25 @@ const FindFriend = () => {
           hobbyQuery: hobbyFilterToUse || undefined,
         });
 
+        if (accessToken) {
+          const impressionEvents = response.matches.flatMap((match) =>
+            (match.participants ?? []).flatMap((participant) =>
+              participant.id && match.requestId
+                ? [{
+                    type: "impression" as const,
+                    candidateId: participant.id,
+                    requestId: match.requestId,
+                    matchVersion: `${match.version ?? "2.0"}`,
+                    metadata: { matchId: match.id },
+                  }]
+                : []
+            )
+          );
+          void findFriendApi.recordEvents(impressionEvents, accessToken).catch((eventError) => {
+            console.warn("[FindFriend] Could not record match impressions", eventError);
+          });
+        }
+
         setMatches(response.matches);
         setEmptyReason(response.emptyReason ?? null);
         setMatchDebug(response.debug ?? []);
@@ -345,7 +377,7 @@ const FindFriend = () => {
         setStatus("error");
       }
     },
-    [matchMode, preferences, seekerProfile, serializedSlots, matchHobbyFilter]
+    [accessToken, matchMode, preferences, seekerProfile, serializedSlots, matchHobbyFilter]
   );
 
   const handleHobbySearch = useCallback(
@@ -459,8 +491,6 @@ const FindFriend = () => {
     setConnectionErrors({});
   }, [matchMode]);
 
-  const accessToken = session?.access_token ?? null;
-
   const handleSendConnection = useCallback(
     async (participantId: string) => {
       if (!participantId) return;
@@ -487,6 +517,20 @@ const FindFriend = () => {
 
       try {
         await connectionsApi.sendConnectionRequest(accessToken, participantId);
+        const sourceMatch = matches.find((match) =>
+          match.participants?.some((participant) => participant.id === participantId)
+        );
+        if (sourceMatch?.requestId) {
+          void findFriendApi.recordEvents([{
+            type: "request",
+            candidateId: participantId,
+            requestId: sourceMatch.requestId,
+            matchVersion: `${sourceMatch.version ?? "2.0"}`,
+            metadata: { matchId: sourceMatch.id },
+          }], accessToken).catch((eventError) => {
+            console.warn("[FindFriend] Could not record connection request", eventError);
+          });
+        }
         setConnectionStatuses((prev) => ({
           ...prev,
           [participantId]: "sent",
@@ -508,7 +552,7 @@ const FindFriend = () => {
         }));
       }
     },
-    [accessToken]
+    [accessToken, matches]
   );
 
   useEffect(() => {

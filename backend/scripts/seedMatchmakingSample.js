@@ -14,6 +14,14 @@
 const process = require("node:process");
 const supabase = require("../auth/services/supabaseClient");
 const sampleUsers = require("../matchmaking/data/sampleUsers");
+const dummyProfiles = require("../matchmaking/data/dummyProfiles");
+
+const useDummyProfiles = process.argv.includes("--dummy");
+const shouldCleanup = process.argv.includes("--cleanup");
+const seedCohort = useDummyProfiles
+  ? "matchmaking-dummy-v2"
+  : "matchmaking-sample-v1";
+const profiles = useDummyProfiles ? dummyProfiles : sampleUsers;
 
 const status =
   typeof supabase.__status === "function" ? supabase.__status() : null;
@@ -45,6 +53,7 @@ const toProfileRow = (user, idMap) => {
     vibe_check: user.vibeCheck,
     is_opted_in: true,
     instagram: user.instagram || null,
+    open_to: user.openTo || [],
   };
 };
 
@@ -90,6 +99,22 @@ const seed = async () => {
     } while (page);
   }
 
+  if (shouldCleanup) {
+    const seededUsers = [...authUsers.values()].filter(
+      (user) => user.user_metadata?.seedCohort === seedCohort
+    );
+
+    for (const user of seededUsers) {
+      const { error } = await supabase.auth.admin.deleteUser(user.id);
+      if (error) throw error;
+    }
+
+    console.info(
+      `[seedMatchmakingSample] Removed ${seededUsers.length} users from ${seedCohort}.`
+    );
+    process.exit(0);
+  }
+
   const ensureAuthUser = async (user) => {
     const email =
       typeof user.email === "string" ? user.email.toLowerCase() : undefined;
@@ -113,11 +138,15 @@ const seed = async () => {
         email_confirm: true,
         user_metadata: {
           seeded: true,
+          seedCohort,
           name: user.name,
           hobbies: user.hobbies,
           interests: user.interests,
           classes: user.classes,
           instagram: user.instagram,
+          bio: user.bio,
+          openTo: user.openTo,
+          tags: user.tags,
         },
       });
 
@@ -141,12 +170,12 @@ const seed = async () => {
   };
 
   const idMap = new Map();
-  for (const user of sampleUsers) {
+  for (const user of profiles) {
     const id = await ensureAuthUser(user);
     idMap.set(user.id, id);
   }
 
-  const profileRows = sampleUsers.map((user) => toProfileRow(user, idMap));
+  const profileRows = profiles.map((user) => toProfileRow(user, idMap));
 
   const { error: profileError } = await supabase
     .from("match_profiles")
@@ -160,7 +189,45 @@ const seed = async () => {
     process.exit(1);
   }
 
-  for (const user of sampleUsers) {
+  const profileIds = [...idMap.values()];
+  const { error: clearTagsError } = await supabase
+    .from("profile_tags")
+    .delete()
+    .in("user_id", profileIds);
+
+  if (clearTagsError) {
+    console.error(
+      "[seedMatchmakingSample] Failed to clear profile tags",
+      clearTagsError
+    );
+    process.exit(1);
+  }
+
+  const profileTagRows = profiles.flatMap((user) =>
+    (user.tags || []).map((tagId) => ({
+      user_id: idMap.get(user.id),
+      tag_id: tagId,
+      source: "explicit",
+      confidence: 1,
+      confirmed: true,
+    }))
+  );
+
+  if (profileTagRows.length) {
+    const { error: tagError } = await supabase
+      .from("profile_tags")
+      .insert(profileTagRows);
+
+    if (tagError) {
+      console.error(
+        "[seedMatchmakingSample] Failed to insert profile tags",
+        tagError
+      );
+      process.exit(1);
+    }
+  }
+
+  for (const user of profiles) {
     const availabilityRows = toAvailabilityRows(user, idMap);
 
     const { error: deleteError } = await supabase
@@ -199,7 +266,7 @@ const seed = async () => {
   }
 
   console.info(
-    "[seedMatchmakingSample] Successfully seeded profiles and availability."
+    `[seedMatchmakingSample] Successfully seeded ${profiles.length} profiles from ${seedCohort}.`
   );
   process.exit(0);
 };

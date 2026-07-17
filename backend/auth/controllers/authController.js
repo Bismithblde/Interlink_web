@@ -1,4 +1,5 @@
 const supabase = require("../services/supabaseClient");
+const { enqueueEnrichment } = require("../../matchmaking/services/enrichmentService");
 
 // Simple controller examples. Adjust to your Supabase client version and security needs.
 const logDebug = (method, message, details) => {
@@ -251,6 +252,7 @@ const allowedMetadataFields = [
   "metadata",
   "connections",
   "instagram",
+  "openTo",
 ];
 
 exports.updateProfile = async (req, res) => {
@@ -270,6 +272,23 @@ exports.updateProfile = async (req, res) => {
     }
     return accumulator;
   }, {});
+
+  if (Object.prototype.hasOwnProperty.call(req.body, "bio")) {
+    if (typeof req.body.bio !== "string") {
+      return res.status(400).json({ error: "bio must be a string" });
+    }
+    metadataUpdates.bio = req.body.bio.trim();
+    if (metadataUpdates.bio.length > 800) {
+      return res.status(400).json({ error: "bio must be 800 characters or fewer" });
+    }
+  }
+
+  if (req.body.profileComplete === true) {
+    const completedBio = metadataUpdates.bio ?? req.user.user_metadata?.bio ?? "";
+    if (completedBio.length < 40 || completedBio.length > 800) {
+      return res.status(400).json({ error: "bio must be between 40 and 800 characters to complete your profile" });
+    }
+  }
 
   const normalizeList = (value) => {
     if (!value) return undefined;
@@ -299,6 +318,10 @@ exports.updateProfile = async (req, res) => {
 
   if (metadataUpdates.classes !== undefined) {
     metadataUpdates.classes = normalizeList(metadataUpdates.classes) || [];
+  }
+
+  if (metadataUpdates.openTo !== undefined) {
+    metadataUpdates.openTo = normalizeList(metadataUpdates.openTo) || [];
   }
 
   if (metadataUpdates.favoriteSpot !== undefined) {
@@ -432,6 +455,8 @@ exports.updateProfile = async (req, res) => {
         vibe_check: null,
         is_opted_in: true,
         instagram: nextUserMetadata.instagram || null,
+        avatar_url: nextUserMetadata.avatarUrl || null,
+        open_to: toStringArray(nextUserMetadata.openTo),
       };
 
       const { error: profileError } = await supabase
@@ -446,10 +471,60 @@ exports.updateProfile = async (req, res) => {
       }
     }
 
+    if (hasMetadataUpdates) {
+      try {
+        await enqueueEnrichment(userId, nextUserMetadata);
+      } catch (enrichmentError) {
+        console.warn(
+          "[AuthController.updateProfile] Profile saved but enrichment could not be queued",
+          enrichmentError.message
+        );
+      }
+    }
+
     return res.status(200).json({ user: updatedUser });
   } catch (err) {
     logError("updateProfile", err);
     return res.status(500).json({ error: err.message || err });
+  }
+};
+
+exports.createAvatarUpload = async (req, res) => {
+  if (!req.user?.id) return res.status(401).json({ error: "Unauthorized" });
+  const contentType = `${req.body?.contentType || ""}`.toLowerCase();
+  const fileSize = Number(req.body?.fileSize);
+  if (contentType !== "image/webp") {
+    return res.status(400).json({ error: "avatar must be an image/webp file" });
+  }
+  if (!Number.isFinite(fileSize) || fileSize <= 0 || fileSize > 2 * 1024 * 1024) {
+    return res.status(400).json({ error: "avatar fileSize must be between 1 byte and 2 MB" });
+  }
+  const bucket = process.env.SUPABASE_AVATAR_BUCKET || "profile-avatars";
+  const objectPath = `${req.user.id}/avatar.webp`;
+  if (!supabase.storage?.from) {
+    return res.status(200).json({
+      uploadUrl: `http://localhost:3000/__stub-uploads/${objectPath}`,
+      avatarUrl: `stub:///${bucket}/${objectPath}`,
+      method: "PUT",
+      headers: { "Content-Type": "image/webp" },
+      stub: true,
+    });
+  }
+  try {
+    const storageBucket = supabase.storage.from(bucket);
+    const { data, error } = await storageBucket.createSignedUploadUrl(objectPath, { upsert: true });
+    if (error) throw error;
+    const baseUrl = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
+    return res.status(200).json({
+      uploadUrl: data?.signedUrl,
+      avatarUrl: `${baseUrl}/storage/v1/object/public/${bucket}/${objectPath}`,
+      method: "PUT",
+      headers: { "Content-Type": "image/webp" },
+      path: objectPath,
+    });
+  } catch (error) {
+    console.error("[AuthController.createAvatarUpload]", error);
+    return res.status(502).json({ error: "Unable to create avatar upload URL" });
   }
 };
 
