@@ -1,253 +1,248 @@
-## Interlink – Hackathon README
+# Interlink
 
-Welcome to **Interlink**, our commuter-student matchmaking and hangout-planning prototype built during the Hack SBU sprint. Interlink helps students find like-minded peers, align schedules in minutes, and spin up campus meetups—powered by smart data hygiene, AI-assisted planning, and a polished end-to-end experience.
+Interlink helps commuter students find people they are likely to connect with, compare shared availability, and turn individual recommendations into a group they choose themselves.
 
----
+The current experience combines natural student profiles, schedule-aware one-on-one discovery, transparent match explanations, manual group building, connection requests, and AI-assisted meetup planning.
 
-### Why Interlink
+## Product flow
 
-- **Campus connection superpower**: commuters drop availability, interests, and courses to discover curated matches that feel human.
-- **From match to meetup**: every connection includes shared availability highlights plus an instant AI-generated hangout plan with deterministic fallback.
-- **Rapid iteration ready**: the stack runs locally, swaps between sample data and Supabase, and is instrumented for future growth.
+1. Create an account and complete a profile with a biography, major, classes, interests, hobbies, and what you are open to.
+2. Add weekly availability with the calendar editor.
+3. Request individual recommendations from the signed-in dashboard.
+4. Read each profile as a social discovery card, including its biography, interests, classes, campus spot, availability, compatibility score, and match explanation.
+5. Select people to build a group manually. Selected cards receive a distinct border and remain visible in the group summary.
+6. Send connection requests or continue into the meetup-planning flow.
 
----
+## Architecture
 
-### Architecture at a Glance
+```mermaid
+flowchart LR
+    UI[React and TypeScript UI] --> API[Typed frontend services]
+    API --> EXPRESS[Express routes]
+    EXPRESS --> AUTH[Auth and profile]
+    EXPRESS --> SCHEDULE[Schedule]
+    EXPRESS --> CONNECTIONS[Connections and inbox]
+    EXPRESS --> MATCH[Matchmaking pipeline]
 
-- **Frontend** – React + TypeScript + Vite SPA (`frontend/`)
-  - Find Friend flow (`components/find-friend/`) with mode selector, schedule preview, matches list, and activity ideas.
-  - Schedule builder using `react-big-calendar`, optimistic sync (`useScheduleManager`), conflict detection, and friendly alerts.
-  - Authenticated pages (Dashboard, Friends, Hangout Planner, etc.) wrapped by a shared `AuthContext`.
-- **Backend** – Express APIs (`backend/`)
-  - Matchmaking domain (`matchmaking/`) handles schedule overlap math, semantic affinity scoring, group matchmaking, and debug logging.
-  - AI services (`activitySuggestionService.js`) integrate Google Gemini with sanitizer guardrails and deterministic fallback content.
-  - Auth, Connections, Inbox, and Schedule modules (Supabase-ready) with in-memory stores for hackathon agility.
-- **Shared practices**
-  - Bidirectional sanitizers (`sanitizeUser`, `sanitizeSeeker`, `sanitizeInstagram`) ensure consistent payload hygiene.
-  - Structured errors (`MatchmakingApiError` mirror) and typed DTOs keep the UX resilient.
-  - SQL migrations (`backend/db/migrations/`) lay groundwork for a Postgres schema.
+    AUTH --> SUPABASE[(Supabase)]
+    SCHEDULE --> SUPABASE
+    CONNECTIONS --> SUPABASE
+    MATCH --> REPOSITORY[Profile repository]
+    REPOSITORY --> SUPABASE
+    REPOSITORY --> SAMPLE[Sample profiles fallback]
 
----
+    MATCH --> FILTER[Candidate and schedule filters]
+    FILTER --> RANK[Reciprocal ranking]
+    RANK --> DIVERSIFY[Fatigue and exploration diversification]
+    DIVERSIFY --> WHY[Match reasons and optional diagnostics]
+    WHY --> UI
 
-### Feature Highlights
+    AUTH --> ENRICH[Profile tag enrichment]
+    MATCH --> GEMINI[Gemini activity and hangout suggestions]
+```
 
-- 🧭 **Smart matchmaking** – compatibility breakdowns (schedule, affinity, hobbies, interests, major bonus) and cluster tagging for pairs and groups.
-- 📅 **Schedule intelligence** – drag-and-drop free-time slots, overlap detection, auto-save hashing, and contextual messaging.
-- 🤖 **AI hangout concierge** – Gemini-backed activity suggestions and hangout agendas with JSON prompts, fallbacks, and environment gating.
-- 🔗 **Connections hub** – friend request APIs with swap-in persistence, mirrored by `connectionsApi.ts` and `FriendsPage.tsx`.
-- 🧼 **Input sanitization everywhere** – Instagram normalization, string list trimming, payload dedupe, and safe defaults across the stack.
+### Frontend
 
----
+The `frontend/` application is a React 19, TypeScript, and Vite single-page app.
 
-### Getting Started
+- `src/components/SignedInDashboard.tsx` owns recommendation requests, the profile timeline, manual group selection, and recommendation events.
+- `src/components/matchmaking/MatchRankingDebug.tsx` renders environment-gated ranking diagnostics.
+- `src/features/schedule/` contains the weekly calendar, saved-time summary, and schedule state management.
+- `src/pages/ProfilePage.tsx` and `src/components/ProfileEditorForm.tsx` manage the profile data used by ranking.
+- `src/services/` contains typed clients for auth, schedules, connections, and matchmaking.
+- `src/context/AuthContext.tsx` provides the authenticated session to protected pages.
 
-#### Prerequisites
+### Backend
 
-- Node.js 20+
-- pnpm (or npm)
-- Supabase + Google Gemini keys (optional; stubs available)
+The `backend/` application is an Express service organized by domain.
 
-#### Quickstart
+- `auth/` handles signup, signin, protected profile updates, avatar upload contracts, and enrichment status.
+- `schedule/` stores canonical availability slots.
+- `connections/` and `inbox/` manage friend requests and the connection graph.
+- `matchmaking/data/profileRepository.js` selects Supabase data when configured and falls back to bundled profiles for local development.
+- `matchmaking/services/matchService.js` orchestrates filtering, overlap checks, ranking, diversification, explanations, and response diagnostics.
+- `matchmaking/services/rankingService.js` computes reciprocal profile affinity, intent, graph, confidence, fatigue, and exploration adjustments.
+- `matchmaking/utils/bitmapSchedule.js` represents a week in 30-minute blocks for exact total and consecutive overlap calculations.
+- `matchmaking/utils/matchmakingLogger.js` emits structured, request-correlated pipeline logs.
+- `db/migrations/` contains the Postgres and Supabase schema history.
+
+### Ranking pipeline
+
+For each eligible candidate, the pipeline:
+
+1. Removes the current user, existing friends, blocked candidates, and profiles that fail active filters.
+2. Computes weekly overlap and rejects candidates below the requested consecutive-overlap cutoff.
+3. Calculates profile affinity from IDF-weighted canonical tag overlap and class Jaccard similarity.
+4. Combines reciprocal affinity, intent compatibility, graph signals, confidence, and schedule eligibility into a base rank.
+5. Applies recent-impression fatigue and an explicit exploration boost.
+6. Diversifies the final list and generates concrete `whyMatched` statements from shared profile and schedule evidence.
+
+This path currently does not call an embedding model. When frontend diagnostics are enabled, embedding similarity is reported as `not used` so tag affinity is never mislabeled as an embedding score.
+
+## Main features
+
+- Natural sample profiles with distinct biographies, interests, hobbies, classes, campus locations, and social intent.
+- Individual recommendation cards designed for profile browsing instead of automatic grouped results.
+- Manual group selection with persistent selected-card styling and a live selected-people count.
+- Human-readable match reasons based on actual shared tags, classes, intent, and availability.
+- Exact weekly and consecutive schedule-overlap calculations.
+- Exploration and fatigue controls that prevent every run from returning an identical top five.
+- Structured matchmaking logs that trace dataset selection, filtering, ranking, diversification, LLM behavior, and failures.
+- Optional per-card frontend diagnostics for candidate IDs and every major ranking component.
+- Supabase-backed auth, profiles, schedules, and connections with local stub or sample fallbacks.
+- Gemini activity suggestions and hangout plans with deterministic fallback behavior.
+- Redis-compatible top-match caching with profile-version invalidation.
+
+## Local development
+
+### Prerequisites
+
+- Node.js 20 or newer
+- npm
+- Optional: Supabase, Gemini, DeepSeek, and Redis credentials
+
+### Setup
 
 ```bash
-# From the repository root
 npm install
 npm --prefix backend install
 npm --prefix frontend install
+
 cp backend/env.example backend/.env
-cp frontend/env.example frontend/.env
-npm run dev                  # backend :3001, frontend :5173
+cp frontend/env.example frontend/.env.local
+
+npm run dev
 ```
 
-Visit `http://localhost:5173`. Stubbed auth instructions appear on the login screen. The Find Friend page seeds sample data and calls live matchmaking endpoints.
+The root development command starts:
 
----
+- Frontend: `http://localhost:5173`
+- Backend: `http://localhost:3001`
 
-### Key API Endpoints
+Leaving Supabase credentials empty uses the in-memory stub and bundled matchmaking data where supported.
 
-| Method   | Endpoint                            | Purpose                    | Notes                                                         |
-| -------- | ----------------------------------- | -------------------------- | ------------------------------------------------------------- |
-| POST     | `/api/matchmaking/matches`          | Generate match previews    | Requires `mode`, `slots`, optional seeker profile and filters |
-| POST     | `/api/matchmaking/activity-ideas`   | AI-curated activities      | Requires `GEMINI_API_KEY`; deterministic fallback on failure  |
-| POST     | `/api/matchmaking/hangout-plan`     | AI meetup agenda           | Same Gemini guardrails; returns agenda, prompts, follow-ups   |
-| GET/POST | `/api/schedule/:userId`             | Fetch/save free-time slots | JSON-serialized schedule consumed by `useScheduleManager`     |
-| Multiple | `/api/auth/*`, `/api/connections/*` | Auth and friend graph      | Supabase-backed when configured, stubbed otherwise            |
+### Seed natural profiles
 
----
-
-### Testing and Tooling
-
-- `pnpm test` (backend) – Jest suites for auth, connections, matchmaking.
-- `pnpm lint` (frontend) – ESLint plus TypeScript quality gate.
-- `scripts/seedMatchmakingSample.js` – seeds demo data for matchmaking.
-- `CODE_AUDIT.md` – documents privacy and security considerations.
-
----
-
-### Configuration Cheatsheet
-
-- `SUPABASE_USE_STUB=true` → use `supabaseStub.js`; configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to enable real Supabase.
-- `GEMINI_API_KEY` (and optional `GEMINI_MODEL`) → enable AI suggestions and hangout planner; otherwise 501 responses with fallback messaging.
-- `VITE_API_BASE_URL` (frontend) → points to backend (`http://localhost:4000` default).
-
----
-
-### Hackathon Wins
-
-- End-to-end matchmaking loop built and demo-ready in under 36 hours.
-- Schedule-aware compatibility scoring with semantic clustering and trait highlights.
-- Dual-mode AI assistance with guardrails and reliable fallbacks.
-- Polished UX with high-frequency state sync, error messaging, and story-driven UI.
-- Seamless switch between sample datasets and Supabase for flexible demos.
-
----
-
-### Lessons Learned
-
-- Shared sanitizers across frontend and backend prevented noisy inputs from skewing recommendations.
-- Typed fetch layers plus explicit fallback messaging kept the UX resilient.
-- AI integrations need operational guardrails (environment gating, payload trimming) before showtime.
-- Early contract definitions minimized handoff friction between teammates.
-
----
-
-### What’s Next
-
-- Wire Supabase and Postgres migrations into a persistent matchmaking dataset.
-- Productionize Gemini usage with observability, rate limits, and user consent flows.
-- Expand group matchmaking into club or study pod formation via existing breakdowns.
-- Add real-time notifications and richer connection workflows using inbox services.
-- Mobile-friendly UI and accessibility refinements before a campus pilot.
-
----
-
-Have fun exploring Interlink! Reach out if you want to extend the prototype or polish it post-hackathon.
-
-## Interlink – Hackathon README
-
-Welcome to **Interlink**, our commuter-student matchmaking and hangout-planning prototype built during the Hack SBU sprint. Interlink helps students find like-minded peers, align schedules in minutes, and spin up campus meetups—powered by smart data hygiene, AI-assisted planning, and a polished end-to-end experience.
-
----
-
-### Why Interlink
-
-- **Campus connection superpower**: commuters drop availability, interests, and courses to discover curated matches that feel human.
-- **From match to meetup**: every connection includes shared availability highlights plus an instant AI-generated hangout plan with deterministic fallback.
-- **Rapid iteration ready**: the stack runs locally, swaps between sample data and Supabase, and is instrumented for future growth.
-
----
-
-### Architecture at a Glance
-
-- **Frontend** – React + TypeScript + Vite SPA (`frontend/`)
-  - Find Friend flow (`components/find-friend/`) with mode selector, schedule preview, matches list, and activity ideas.
-  - Schedule builder using `react-big-calendar`, optimistic sync (`useScheduleManager`), conflict detection, and friendly alerts.
-  - Authenticated pages (Dashboard, Friends, Hangout Planner, etc.) wrapped by a shared `AuthContext`.
-- **Backend** – Express APIs (`backend/`)
-  - Matchmaking domain (`matchmaking/`) handles schedule overlap math, semantic affinity scoring, group matchmaking, and debug logging.
-  - AI services (`activitySuggestionService.js`) integrate Google Gemini with sanitizer guardrails and deterministic fallback content.
-  - Auth, Connections, Inbox, and Schedule modules (Supabase-ready) with in-memory stores for hackathon agility.
-- **Shared practices**
-  - Bidirectional sanitizers (`sanitizeUser`, `sanitizeSeeker`, `sanitizeInstagram`) ensure consistent payload hygiene.
-  - Structured errors (`MatchmakingApiError` mirror) and typed DTOs keep the UX resilient.
-  - SQL migrations (`backend/db/migrations/`) lay groundwork for a Postgres schema.
-
----
-
-### Feature Highlights
-
-- 🧭 **Smart matchmaking** – compatibility breakdowns (schedule, affinity, hobbies, interests, major bonus) and cluster tagging for pairs and groups.
-- 📅 **Schedule intelligence** – drag-and-drop free-time slots, overlap detection, auto-save hashing, and contextual messaging.
-- 🤖 **AI hangout concierge** – Gemini-backed activity suggestions and hangout agendas with JSON prompts, fallbacks, and environment gating.
-- 🔗 **Connections hub** – friend request APIs with swap-in persistence, mirrored by `connectionsApi.ts` and `FriendsPage.tsx`.
-- 🧼 **Input sanitization everywhere** – Instagram normalization, string list trimming, payload dedupe, and safe defaults across the stack.
-
----
-
-### Getting Started
-
-#### Prerequisites
-
-- Node.js 20+
-- pnpm (or npm)
-- Supabase + Google Gemini keys (optional; stubs available)
-
-#### Quickstart
+With Supabase credentials configured in `backend/.env`:
 
 ```bash
-# Backend
-cd backend
-pnpm install
-cp env.example .env          # configure SUPABASE_* or leave blank for stubs
-pnpm run dev                 # default port :4000
-
-# Frontend
-cd ../frontend
-pnpm install
-cp env.example .env          # set VITE_API_BASE_URL if backend is not :4000
-pnpm run dev                 # default port :5173
+npm --prefix backend run seed:dummy
 ```
 
-Visit `http://localhost:5173`. Stubbed auth instructions appear on the login screen. The Find Friend page seeds sample data and calls live matchmaking endpoints.
+Remove those seeded profiles with:
 
----
+```bash
+npm --prefix backend run seed:dummy:cleanup
+```
 
-### Key API Endpoints
+## Configuration
 
-| Method   | Endpoint                            | Purpose                    | Notes                                                         |
-| -------- | ----------------------------------- | -------------------------- | ------------------------------------------------------------- |
-| POST     | `/api/matchmaking/matches`          | Generate match previews    | Requires `mode`, `slots`, optional seeker profile and filters |
-| POST     | `/api/matchmaking/activity-ideas`   | AI-curated activities      | Requires `GEMINI_API_KEY`; deterministic fallback on failure  |
-| POST     | `/api/matchmaking/hangout-plan`     | AI meetup agenda           | Same Gemini guardrails; returns agenda, prompts, follow-ups   |
-| GET/POST | `/api/schedule/:userId`             | Fetch/save free-time slots | JSON-serialized schedule consumed by `useScheduleManager`     |
-| Multiple | `/api/auth/*`, `/api/connections/*` | Auth and friend graph      | Supabase-backed when configured, stubbed otherwise            |
+### Frontend
 
----
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `VITE_BACKEND_URL` | `http://localhost:3001` | Express API base URL |
+| `VITE_ACTIVITY_AI_ENABLED` | `true` | Shows or hides AI activity suggestions |
+| `VITE_MATCHMAKING_DEBUG` | `false` | Shows per-candidate ranking diagnostics |
 
-### Testing and Tooling
+Vite reads these values when the development server starts. Restart Vite after editing `.env.local`.
 
-- `pnpm test` (backend) – Jest suites for auth, connections, matchmaking.
-- `pnpm lint` (frontend) – ESLint plus TypeScript quality gate.
-- `scripts/seedMatchmakingSample.js` – seeds demo data for matchmaking.
-- `CODE_AUDIT.md` – documents privacy and security considerations.
+When `VITE_MATCHMAKING_DEBUG=true`, each recommendation shows:
 
----
+- Similarity-ranked or exploration-boosted selection mode
+- Candidate UUID and algorithm version
+- Final and base rank scores
+- Display fit, confidence, profile affinity, and reciprocal affinity
+- Directional tag, class, intent, graph, fatigue, and exploration components
+- Recent impressions and schedule overlap
+- Similarity strategy, shared canonical tags, and embedding status
 
-### Configuration Cheatsheet
+Keep this flag disabled in normal user-facing builds.
 
-- `SUPABASE_USE_STUB=true` → use `supabaseStub.js`; configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to enable real Supabase.
-- `GEMINI_API_KEY` (and optional `GEMINI_MODEL`) → enable AI suggestions and hangout planner; otherwise 501 responses with fallback messaging.
-- `VITE_API_BASE_URL` (frontend) → points to backend (`http://localhost:4000` default).
+### Backend
 
----
+| Variable | Purpose |
+| --- | --- |
+| `PORT` | Express port, default `3001` |
+| `CLIENT_ORIGIN` or `ALLOWED_ORIGINS` | Comma-separated browser origins allowed by CORS |
+| `SUPABASE_URL` | Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-side Supabase credential |
+| `SUPABASE_USE_STUB` | Forces the in-memory Supabase implementation |
+| `MATCHMAKING_LOG_LEVEL` | `debug`, `info`, `warn`, `error`, or `off` |
+| `GEMINI_API_KEY` and `GEMINI_MODEL` | Activity and hangout suggestion provider |
+| `DEEPSEEK_API_KEY` and related variables | Optional profile tag enrichment provider |
+| `REDIS_URL` | Optional top-match cache |
 
-### Hackathon Wins
+Never commit populated `.env` or `.env.local` files.
 
-- End-to-end matchmaking loop built and demo-ready in under 36 hours.
-- Schedule-aware compatibility scoring with semantic clustering and trait highlights.
-- Dual-mode AI assistance with guardrails and reliable fallbacks.
-- Polished UX with high-frequency state sync, error messaging, and story-driven UI.
-- Seamless switch between sample datasets and Supabase for flexible demos.
+## Matchmaking diagnostics
 
----
+Backend observability is controlled separately from the frontend panel:
 
-### Lessons Learned
+```env
+MATCHMAKING_LOG_LEVEL=debug
+```
 
-- Shared sanitizers across frontend and backend prevented noisy inputs from skewing recommendations.
-- Typed fetch layers plus explicit fallback messaging kept the UX resilient.
-- AI integrations need operational guardrails (environment gating, payload trimming) before showtime.
-- Early contract definitions minimized handoff friction between teammates.
+Debug logging emits newline-delimited JSON for each candidate decision and score component. Matchmaking responses include an `X-Matchmaking-Request-Id` header and a matching `requestId` field. Use that ID to reconstruct one request across dataset loading, filtering, schedule checks, ranking, diversification, provider calls, and completion.
 
----
+Sensitive values such as emails, biographies, prompts, credentials, tokens, and raw provider responses are redacted or bounded. See [`backend/matchmaking/OBSERVABILITY.md`](backend/matchmaking/OBSERVABILITY.md) for the event catalog.
 
-### What’s Next
+## API overview
 
-- Wire Supabase and Postgres migrations into a persistent matchmaking dataset.
-- Productionize Gemini usage with observability, rate limits, and user consent flows.
-- Expand group matchmaking into club or study pod formation via existing breakdowns.
-- Add real-time notifications and richer connection workflows using inbox services.
-- Mobile-friendly UI and accessibility refinements before a campus pilot.
+The backend is mounted directly at `http://localhost:3001` without an `/api` prefix.
 
----
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `POST` | `/auth/signup` | Create an account |
+| `POST` | `/auth/signin` | Create a session |
+| `GET`, `PATCH` | `/auth/profile` | Read or update the authenticated profile |
+| `GET`, `PUT`, `DELETE` | `/schedules/:userId` | Read, replace, or clear availability |
+| `POST` | `/matchmaking/matches` | Generate individual recommendations |
+| `POST` | `/matchmaking/events` | Record recommendation impressions and actions |
+| `POST` | `/matchmaking/activity-suggestions` | Generate activity ideas |
+| `POST` | `/matchmaking/hangout-plans` | Generate a meetup plan |
+| `GET`, `POST`, `DELETE` | `/connections/*` | Manage requests and friendships |
+| `GET` | `/inbox` | Read the authenticated inbox snapshot |
 
-Have fun exploring Interlink! Reach out if you want to extend the prototype or polish it post-hackathon.
+## Validation
+
+```bash
+npm --prefix backend test
+npm --prefix frontend run lint
+npm --prefix frontend run build
+```
+
+The backend uses Node's built-in test runner and Supertest. Frontend validation combines ESLint, TypeScript compilation, and a Vite production build.
+
+## Repository map
+
+```text
+interlink/
+|-- backend/
+|   |-- auth/
+|   |-- connections/
+|   |-- db/migrations/
+|   |-- inbox/
+|   |-- matchmaking/
+|   |-- schedule/
+|   `-- tests/
+|-- frontend/
+|   |-- public/assets/
+|   `-- src/
+|       |-- components/
+|       |-- context/
+|       |-- features/schedule/
+|       |-- pages/
+|       |-- services/
+|       `-- styles/
+|-- CODE_AUDIT.md
+`-- docker-compose.yml
+```
+
+## Further documentation
+
+- [`backend/matchmaking/README.md`](backend/matchmaking/README.md)
+- [`backend/matchmaking/OBSERVABILITY.md`](backend/matchmaking/OBSERVABILITY.md)
+- [`backend/README-auth.md`](backend/README-auth.md)
+- [`backend/README-connections.md`](backend/README-connections.md)
+- [`CODE_AUDIT.md`](CODE_AUDIT.md)

@@ -14,6 +14,81 @@ const SUPPORTED_MODES = {
 const normalizedMode = (mode) => SUPPORTED_MODES[`${mode || "one-on-one"}`.toLowerCase().replace(/\s/g, "-")] || "one-on-one";
 const unique = (...arrays) => [...new Set(arrays.filter(Array.isArray).flat().map((value) => `${value}`.trim()).filter(Boolean))];
 
+const normalizeValue = (value) => `${value || ""}`.trim().toLowerCase();
+const formatDuration = (minutes) => {
+  const rounded = Math.max(0, Math.round(Number(minutes) || 0));
+  const hours = Math.floor(rounded / 60);
+  const remainder = rounded % 60;
+  if (!hours) return `${remainder} min`;
+  if (!remainder) return `${hours} hr`;
+  return `${hours} hr ${remainder} min`;
+};
+const formatList = (items = []) => {
+  const values = items.filter(Boolean);
+  if (values.length < 2) return values[0] || "";
+  if (values.length === 2) return `${values[0]} and ${values[1]}`;
+  return `${values.slice(0, -1).join(", ")}, and ${values[values.length - 1]}`;
+};
+const intersectValues = (left = [], right = []) => {
+  const rightValues = new Set(right.map(normalizeValue));
+  return unique(left.filter((value) => rightValues.has(normalizeValue(value))));
+};
+const intentLabels = {
+  "new-friends": "meeting new friends",
+  "study-buddy": "finding a study buddy",
+  "project-partner": "finding a project partner",
+  "casual-hangout": "casual hangouts",
+};
+
+const buildScheduleReason = (overlapMinutes, longestOverlapMinutes, group = false) => {
+  const total = formatDuration(overlapMinutes);
+  const longest = formatDuration(longestOverlapMinutes);
+  const subject = group ? "Everyone" : "You both";
+  const label = Math.round(overlapMinutes) > Math.round(longestOverlapMinutes)
+    ? `${subject} ${group ? "has" : "have"} ${total} of total overlap, including a ${longest} continuous block`
+    : group
+      ? `Everyone is free for a ${longest} continuous block`
+      : `You are both free for a ${longest} continuous block`;
+  return { type: "schedule", label };
+};
+
+const buildPairReasons = ({ seeker, candidate, rank, intent, overlapMinutes, longestOverlapMinutes }) => {
+  const reasons = [buildScheduleReason(overlapMinutes, longestOverlapMinutes)];
+  const sharedInterests = intersectValues(seeker.interests, candidate.interests).slice(0, 3);
+  const sharedHobbies = intersectValues(seeker.hobbies, candidate.hobbies).slice(0, 3);
+  const sharedClasses = intersectValues(seeker.classes, candidate.classes).slice(0, 2);
+  if (sharedInterests.length) reasons.push({ type: "interest", label: `You both care about ${formatList(sharedInterests)}`, evidence: sharedInterests });
+  if (sharedHobbies.length) reasons.push({ type: "hobby", label: `You both enjoy ${formatList(sharedHobbies)}`, evidence: sharedHobbies });
+  if (sharedClasses.length) reasons.push({ type: "class", label: `You share ${formatList(sharedClasses)}`, evidence: sharedClasses });
+  const normalizedIntent = normalizeValue(intent);
+  if (normalizedIntent && rank.diagnostics.intentTowardCandidate === 1 && rank.diagnostics.intentTowardViewer === 1) {
+    reasons.push({ type: "intent", label: `You are both open to ${intentLabels[normalizedIntent] || normalizedIntent.replace(/-/g, " ")}` });
+  }
+  if (rank.graphScore > 0) reasons.push({ type: "connection", label: "You have people in common" });
+  return reasons.slice(0, 4);
+};
+
+const buildGroupReasons = ({ seeker, participants, intent, overlapMinutes, longestOverlapMinutes, sharedInterests, sharedHobbies }) => {
+  const reasons = [buildScheduleReason(overlapMinutes, longestOverlapMinutes, true)];
+  const interests = unique(sharedInterests).slice(0, 3);
+  const hobbies = unique(sharedHobbies).slice(0, 3);
+  const sharedClasses = unique(...participants.map((participant) => intersectValues(seeker.classes, participant.classes))).slice(0, 2);
+  if (interests.length) reasons.push({ type: "interest", label: `People in this group share your interest in ${formatList(interests)}`, evidence: interests });
+  if (hobbies.length) reasons.push({ type: "hobby", label: `People in this group also enjoy ${formatList(hobbies)}`, evidence: hobbies });
+  if (sharedClasses.length) reasons.push({ type: "class", label: `You have classes in common, including ${formatList(sharedClasses)}`, evidence: sharedClasses });
+  const normalizedIntent = normalizeValue(intent);
+  const seekerIsOpen = !seeker.openTo?.length || seeker.openTo.map(normalizeValue).includes(normalizedIntent);
+  const groupIsOpen = normalizedIntent && participants.every((participant) => !participant.openTo?.length || participant.openTo.map(normalizeValue).includes(normalizedIntent));
+  if (normalizedIntent && seekerIsOpen && groupIsOpen) reasons.push({ type: "intent", label: `Everyone is open to ${intentLabels[normalizedIntent] || normalizedIntent.replace(/-/g, " ")}` });
+  return reasons.slice(0, 4);
+};
+
+const summarizeReasons = (reasons) => {
+  const schedule = reasons.find((reason) => reason.type === "schedule")?.label;
+  const commonGround = reasons.find((reason) => reason.type !== "schedule")?.label;
+  return [schedule, commonGround].filter(Boolean).join(". ");
+};
+
 const mergeSeekerProfile = (incoming = {}, persisted = {}) => ({
   ...persisted, ...incoming,
   interests: unique(persisted.interests, incoming.interests), hobbies: unique(persisted.hobbies, incoming.hobbies),
@@ -142,6 +217,12 @@ const pairMatches = ({ seeker, availability, candidates, intent, minimum, reques
     sharedTags: rank.sharedTags,
     isExploration: rank.isExploration,
   });
+  const matchReasons = buildPairReasons({
+    seeker, candidate, rank, intent,
+    overlapMinutes: bitmapOverlap.overlapMinutes,
+    longestOverlapMinutes: bitmapOverlap.longestOverlapMinutes,
+  });
+  const compatibilityScore = Math.round(45 + rank.finalScore * 54);
   return {
     matchId: `${seeker.id || "anonymous"}::${candidate.id}`, requestId, matchVersion: "2.0", version: "2.0",
     participants: [pickCandidateProfile(candidate)], overlapMinutes: bitmapOverlap.overlapMinutes,
@@ -152,12 +233,39 @@ const pairMatches = ({ seeker, availability, candidates, intent, minimum, reques
     sharedTags: rank.sharedTags, profileAffinity: rank.profileAffinity, reciprocalAffinity: rank.reciprocalAffinity,
     affinity: rank.profileAffinity, reciprocal: rank.reciprocalAffinity,
     graphScore: rank.graphScore, confidence: rank.confidence, isExploration: rank.isExploration, exploration: rank.isExploration,
-    explanations: rank.explanations, compatibilityScore: Math.round(45 + rank.finalScore * 54),
+    explanations: matchReasons.map((reason) => reason.label), matchReasons, compatibilityScore,
     compatibilityBreakdown: { schedule: 1, affinity: rank.profileAffinity, reciprocal: rank.reciprocalAffinity, graph: rank.graphScore },
-    compatibilitySummary: `${bitmapOverlap.longestOverlapMinutes} consecutive shared minutes - ${rank.explanations[0]}`,
+    compatibilitySummary: summarizeReasons(matchReasons),
     candidateScheduleSummary: summarizeSchedule(sortSlotsAscending(schedule)),
     semanticSimilarity: rank.profileAffinity, semanticHighlight: rank.explanations[0],
     rankScore: rank.finalScore, rawIntervalOverlapMinutes: intervalMinutes,
+    rankingDebug: {
+      candidateId: candidate.id,
+      algorithmVersion: "2.0",
+      selectionMode: rank.isExploration ? "exploration" : "similarity",
+      similarityStrategy: "idf-weighted-tags-plus-class-jaccard",
+      embeddingSimilarity: null,
+      finalRankScore: rank.finalScore,
+      baseRankScore: rank.diagnostics.baseScore,
+      compatibilityScore,
+      profileAffinity: rank.profileAffinity,
+      reciprocalAffinity: rank.reciprocalAffinity,
+      graphScore: rank.graphScore,
+      confidence: rank.confidence,
+      tagAffinityTowardCandidate: rank.diagnostics.tagAffinityTowardCandidate,
+      tagAffinityTowardViewer: rank.diagnostics.tagAffinityTowardViewer,
+      classJaccard: rank.diagnostics.classJaccard,
+      intentTowardCandidate: rank.diagnostics.intentTowardCandidate,
+      intentTowardViewer: rank.diagnostics.intentTowardViewer,
+      directionalTowardCandidate: rank.diagnostics.directionalTowardCandidate,
+      directionalTowardViewer: rank.diagnostics.directionalTowardViewer,
+      recentImpressions: rank.diagnostics.recentImpressions,
+      fatigueMultiplier: rank.diagnostics.fatigueMultiplier,
+      explorationBoost: rank.diagnostics.explorationBoost,
+      overlapMinutes: bitmapOverlap.overlapMinutes,
+      longestOverlapMinutes: bitmapOverlap.longestOverlapMinutes,
+      sharedTags: rank.sharedTags,
+    },
   };
   }).filter(Boolean).sort((a, b) => b.rankScore - a.rankScore || b.longestOverlapMinutes - a.longestOverlapMinutes || a.participants[0].id.localeCompare(b.participants[0].id));
   logger?.info("candidates.ranked", {
@@ -170,7 +278,7 @@ const pairMatches = ({ seeker, availability, candidates, intent, minimum, reques
   return diversifyMatches(ranked, 5, logger);
 };
 
-const groupMatches = async ({ seeker, availability, candidates, mode, minimum, requestId, debug, logger }) => {
+const groupMatches = async ({ seeker, availability, candidates, mode, intent, minimum, requestId, debug, logger }) => {
   const size = mode === "one-on-two" ? 2 : 3;
   const finishAffinity = logger?.timer("group.affinity_context_built", { stage: "ranking", candidateCount: candidates.length });
   const affinityContext = await buildAffinityContext({ seeker, candidates, logger });
@@ -185,6 +293,13 @@ const groupMatches = async ({ seeker, availability, candidates, mode, minimum, r
     }
     const intervals = intersectSchedules([sortSlotsAscending(availability), ...group.map((candidate) => sortSlotsAscending(candidate.availability || []))]);
     const compatibility = computeGroupCompatibility({ overlapMinutes: overlap.overlapMinutes, participants: group, affinityContext, minimumOverlapTarget: minimum });
+    const matchReasons = buildGroupReasons({
+      seeker, participants: group, intent,
+      overlapMinutes: overlap.overlapMinutes,
+      longestOverlapMinutes: overlap.longestOverlapMinutes,
+      sharedInterests: compatibility.sharedInterests,
+      sharedHobbies: compatibility.sharedHobbies,
+    });
     debug.push(`[matchService] group=${group.map((candidate) => candidate.id).join("+")} longestOverlap=${overlap.longestOverlapMinutes}`);
     logger?.debug("group.ranked", { stage: "ranking", candidateIds: group.map((candidate) => candidate.id), longestOverlapMinutes: overlap.longestOverlapMinutes, compatibilityScore: compatibility.score, breakdown: compatibility.breakdown });
     return {
@@ -193,7 +308,8 @@ const groupMatches = async ({ seeker, availability, candidates, mode, minimum, r
       longestOverlapMinutes: overlap.longestOverlapMinutes, overlappingAvailability: serializeIntervals(intervals),
       sharedInterests: compatibility.sharedInterests, sharedHobbies: compatibility.sharedHobbies, sharedTags: [],
       compatibilityScore: compatibility.score, compatibilityBreakdown: compatibility.breakdown,
-      compatibilitySummary: compatibility.summary, confidence: 0.5, explanations: ["Everyone has a consecutive shared availability block"],
+      compatibilitySummary: summarizeReasons(matchReasons), confidence: 0.5,
+      explanations: matchReasons.map((reason) => reason.label), matchReasons,
       isExploration: false, profileAffinity: compatibility.breakdown.affinity, reciprocalAffinity: compatibility.breakdown.affinity, graphScore: 0,
       exploration: false, affinity: compatibility.breakdown.affinity, reciprocal: compatibility.breakdown.affinity,
     };
@@ -215,7 +331,7 @@ const findMatches = async ({ seeker = {}, availability, mode, filters = {}, inte
   const debug = [`[matchService] request=${requestId} version=2.0 mode=${requestedMode} minOverlap=${minimum}`, `[matchService] dataSource=${dataset.usesSampleData ? "sample-dataset" : "supabase"} candidates=${candidates.length}`];
   const matches = requestedMode === "one-on-one"
     ? pairMatches({ seeker: mergedSeeker, availability, candidates, intent, minimum, requestId, debug, logger })
-    : await groupMatches({ seeker: mergedSeeker, availability, candidates, mode: requestedMode, minimum, requestId, debug, logger });
+    : await groupMatches({ seeker: mergedSeeker, availability, candidates, mode: requestedMode, intent, minimum, requestId, debug, logger });
   logger?.info("pipeline.completed", { stage: "pipeline", outcome: matches.length ? "matches_found" : "no_matches", datasetSize: dataset.totalCandidates, filteredCandidateCount: candidates.length, matchCount: matches.length });
   return {
     requestId, matchVersion: "2.0", version: "2.0", mode: requestedMode, generatedAt: new Date().toISOString(),

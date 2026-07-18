@@ -46,6 +46,40 @@ export type CompatibilityBreakdown = {
   majorBonus?: number;
 };
 
+export type MatchReason = {
+  type: "schedule" | "interest" | "hobby" | "class" | "intent" | "connection" | "profile";
+  label: string;
+  evidence?: string[];
+};
+
+export type MatchRankingDebug = {
+  candidateId: string;
+  algorithmVersion: string;
+  selectionMode: "exploration" | "similarity";
+  similarityStrategy: string;
+  embeddingSimilarity: number | null;
+  finalRankScore: number;
+  baseRankScore: number;
+  compatibilityScore: number;
+  profileAffinity: number;
+  reciprocalAffinity: number;
+  graphScore: number;
+  confidence: number;
+  tagAffinityTowardCandidate: number;
+  tagAffinityTowardViewer: number;
+  classJaccard: number;
+  intentTowardCandidate: number;
+  intentTowardViewer: number;
+  directionalTowardCandidate: number;
+  directionalTowardViewer: number;
+  recentImpressions: number;
+  fatigueMultiplier: number;
+  explorationBoost: number;
+  overlapMinutes: number;
+  longestOverlapMinutes: number;
+  sharedTags: string[];
+};
+
 export type MatchPreview = {
   id: string;
   groupSize: number;
@@ -62,6 +96,7 @@ export type MatchPreview = {
     id?: string;
     name?: string;
     major?: string;
+    graduationYear?: number;
     interests?: string[];
     classes?: string[];
     bio?: string;
@@ -85,6 +120,8 @@ export type MatchPreview = {
   longestOverlapMinutes?: number;
   isExploration?: boolean;
   explanations?: string[];
+  matchReasons?: MatchReason[];
+  rankingDebug?: MatchRankingDebug;
 };
 
 export type RecommendationEventType =
@@ -135,6 +172,7 @@ type MatchmakingResponse = {
       id?: string;
       name?: string;
       major?: string;
+      graduationYear?: number;
       interests?: string[];
       classes?: string[];
       bio?: string;
@@ -171,6 +209,8 @@ type MatchmakingResponse = {
     longestOverlapMinutes?: number;
     isExploration?: boolean;
     explanations?: string[];
+    matchReasons?: MatchReason[];
+    rankingDebug?: MatchRankingDebug;
   }>;
 };
 
@@ -488,6 +528,7 @@ const transformMatches = (
         id: participant.id,
         name: participant.name,
         major: participant.major,
+        graduationYear: participant.graduationYear,
         interests: participant.interests,
         classes: participant.classes,
         bio: participant.bio,
@@ -515,6 +556,8 @@ const transformMatches = (
       longestOverlapMinutes: match.longestOverlapMinutes,
       isExploration: match.isExploration,
       explanations: match.explanations,
+      matchReasons: match.matchReasons,
+      rankingDebug: match.rankingDebug,
     };
   });
 };

@@ -30,6 +30,11 @@ const buildWhyThisMatch = (match: MatchPreview) => {
   return match.summary;
 };
 
+const getMatchReasons = (match: MatchPreview) =>
+  match.matchReasons?.length
+    ? match.matchReasons.slice(0, 3).map((reason) => reason.label)
+    : [buildWhyThisMatch(match)];
+
 const formatParticipants = (match: MatchPreview) => {
   const names = match.participants
     ?.map((participant) => participant.name)
@@ -168,6 +173,7 @@ const TopMatchRecommendations = ({
             typeof match.semanticSimilarity === "number"
               ? Math.round(match.semanticSimilarity * 100)
               : null;
+          const reasons = getMatchReasons(match);
           return (
             <article
               key={match.id}
@@ -205,9 +211,19 @@ const TopMatchRecommendations = ({
                 </div>
               </div>
 
-              <p className="text-sm text-emerald-100/80">
-                {buildWhyThisMatch(match)}
-              </p>
+              <div className="border-t border-emerald-300/25 pt-3">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-emerald-200">
+                  Why you matched
+                </p>
+                <ul className="space-y-1.5 text-sm text-emerald-100/80">
+                  {reasons.map((reason) => (
+                    <li key={reason} className="flex gap-2">
+                      <span aria-hidden="true">✓</span>
+                      <span>{reason}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
 
               <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.3em] text-emerald-200">
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/20 px-3 py-1 font-semibold">

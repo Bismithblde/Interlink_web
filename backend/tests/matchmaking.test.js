@@ -6,6 +6,7 @@ const request = require("supertest");
 
 const { createApp } = require("../app");
 const sampleUsers = require("../matchmaking/data/sampleUsers");
+const dummyProfiles = require("../matchmaking/data/dummyProfiles");
 
 const app = createApp();
 
@@ -40,6 +41,17 @@ describe("Matchmaking routes", () => {
 
     const [firstMatch] = response.body.matches;
     assert.ok(firstMatch.compatibilityScore >= 45);
+    assert.ok(Array.isArray(firstMatch.matchReasons));
+    assert.ok(firstMatch.matchReasons.some((reason) => reason.type === "schedule"));
+    assert.ok(firstMatch.matchReasons.every((reason) => typeof reason.label === "string" && reason.label.length > 0));
+    assert.equal(firstMatch.rankingDebug.candidateId, firstMatch.participants[0].id);
+    assert.equal(firstMatch.rankingDebug.selectionMode, firstMatch.isExploration ? "exploration" : "similarity");
+    assert.equal(firstMatch.rankingDebug.embeddingSimilarity, null);
+    assert.equal(firstMatch.rankingDebug.similarityStrategy, "idf-weighted-tags-plus-class-jaccard");
+    assert.equal(typeof firstMatch.rankingDebug.finalRankScore, "number");
+    assert.equal(typeof firstMatch.rankingDebug.explorationBoost, "number");
+    assert.doesNotMatch(firstMatch.compatibilitySummary, /deterministic test|synthetic fixture/i);
+    assert.doesNotMatch(firstMatch.compatibilitySummary, /you both are|everyone are/i);
     assert.ok(
       Array.isArray(response.body.debug),
       "debug log should be present for diagnostics"
@@ -92,6 +104,19 @@ describe("Matchmaking routes", () => {
     assert.ok(Array.isArray(response.body.matches));
     assert.ok(response.body.matches.length > 0, "Expected at least one group match");
     assert.equal(response.body.matches[0].participants.length, 2);
+    assert.ok(response.body.matches[0].matchReasons.some((reason) => reason.type === "schedule"));
+    assert.doesNotMatch(response.body.matches[0].compatibilitySummary, /everyone are/i);
+  });
+
+  test("dummy profiles read like distinct student profiles", () => {
+    assert.equal(dummyProfiles.length, 18);
+    assert.equal(new Set(dummyProfiles.map((profile) => profile.name)).size, 18);
+    dummyProfiles.forEach((profile) => {
+      assert.match(profile.name, /^[A-Z][a-z]+ [A-Z][a-z]+$/);
+      assert.ok(profile.bio.length > 40);
+      assert.ok(profile.funFact.length > 20);
+      assert.doesNotMatch(`${profile.name} ${profile.bio} ${profile.funFact} ${profile.vibeCheck}`, /\[TEST\]|synthetic|deterministic test archetype/i);
+    });
   });
 
   test("POST /matchmaking/matches returns empty reason when no overlap", async () => {

@@ -17,24 +17,25 @@ import {
   ChevronDown,
   Clock3,
   LoaderCircle,
-  UsersRound,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { deserializeSlots, serializeSlots } from "../features/schedule/utils";
 import {
   findFriendApi,
-  type MatchMode,
   type MatchPreview,
 } from "../services/findFriendApi";
 import { scheduleApi } from "../services/scheduleApi";
 import type { FreeTimeSlot } from "../types/schedule";
+import MatchRankingDebug from "./matchmaking/MatchRankingDebug";
 
 gsap.registerPlugin(ScrollTrigger, useGSAP);
 
 const DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
 const HOUR_START = 8;
 const HOUR_END = 20;
+const MATCHMAKING_DEBUG_ENABLED =
+  import.meta.env.VITE_MATCHMAKING_DEBUG === "true";
 
 const toDateInputValue = (date: Date) => {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
@@ -89,10 +90,18 @@ const formatHours = (slots: FreeTimeSlot[]) => {
   return `${hours} open ${hours === 1 ? "hour" : "hours"}`;
 };
 
+const formatMinutes = (minutes: number) => {
+  const rounded = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(rounded / 60);
+  const remainder = rounded % 60;
+  if (!hours) return `${remainder} min`;
+  if (!remainder) return `${hours} hr`;
+  return `${hours} hr ${remainder} min`;
+};
+
 const SignedInDashboard = () => {
   const { user } = useAuth();
   const pageRef = useRef<HTMLElement>(null);
-  const [peopleCount, setPeopleCount] = useState(2);
   const [minOverlapMinutes, setMinOverlapMinutes] = useState(60);
   const [startDate, setStartDate] = useState(() => toDateInputValue(new Date()));
   const [endDate, setEndDate] = useState(() =>
@@ -100,6 +109,9 @@ const SignedInDashboard = () => {
   );
   const [slots, setSlots] = useState<FreeTimeSlot[]>([]);
   const [matches, setMatches] = useState<MatchPreview[]>([]);
+  const [selectedProfileIds, setSelectedProfileIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [isLoadingSchedule, setIsLoadingSchedule] = useState(true);
   const [isMatching, setIsMatching] = useState(false);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
@@ -220,12 +232,6 @@ const SignedInDashboard = () => {
     setMatchError(null);
     setEmptyReason(null);
 
-    const mode: MatchMode =
-      peopleCount === 1
-        ? "ONE_ON_ONE"
-        : peopleCount === 2
-          ? "ONE_ON_TWO"
-          : "ONE_ON_THREE";
     const rangeDays = Math.max(
       1,
       Math.ceil(
@@ -236,7 +242,7 @@ const SignedInDashboard = () => {
 
     try {
       const result = await findFriendApi.previewMatches({
-        mode,
+        mode: "ONE_ON_ONE",
         window: rangeDays > 7 ? "NEXT_14_DAYS" : "NEXT_7_DAYS",
         minOverlapMinutes,
         requireSameCourse: false,
@@ -247,6 +253,7 @@ const SignedInDashboard = () => {
         (match) => match.overlapMinutes >= minOverlapMinutes,
       );
       setMatches(eligibleMatches);
+      setSelectedProfileIds(new Set());
       setEmptyReason(
         eligibleMatches.length
           ? null
@@ -266,6 +273,15 @@ const SignedInDashboard = () => {
     } finally {
       setIsMatching(false);
     }
+  };
+
+  const toggleProfileSelection = (profileId: string) => {
+    setSelectedProfileIds((current) => {
+      const next = new Set(current);
+      if (next.has(profileId)) next.delete(profileId);
+      else next.add(profileId);
+      return next;
+    });
   };
 
   return (
@@ -346,22 +362,6 @@ const SignedInDashboard = () => {
           onSubmit={handleSubmit}
         >
           <label className="match-field">
-            <span>People</span>
-            <span className="match-field__control">
-              <UsersRound aria-hidden="true" />
-              <select
-                value={peopleCount}
-                onChange={(event) => setPeopleCount(Number(event.target.value))}
-              >
-                <option value={1}>1 other</option>
-                <option value={2}>2 others</option>
-                <option value={3}>3 others</option>
-              </select>
-              <ChevronDown aria-hidden="true" />
-            </span>
-          </label>
-
-          <label className="match-field">
             <span>Minimum consecutive overlap</span>
             <span className="match-field__control">
               <Clock3 aria-hidden="true" />
@@ -438,33 +438,113 @@ const SignedInDashboard = () => {
         {matches.length > 0 && (
           <section id="match-results" className="match-results" aria-live="polite">
             <header>
-              <h2 className="landing-display">Your best overlap</h2>
-              <span>{matches.length} possibilities</span>
+              <div>
+                <h2 className="landing-display">People worth meeting</h2>
+                <p>Browse individual profiles and select the people you want in your group.</p>
+              </div>
+              <div className="match-results__selection" aria-live="polite">
+                <strong>{selectedProfileIds.size}</strong>
+                <span>{selectedProfileIds.size === 1 ? "person" : "people"} selected</span>
+                {selectedProfileIds.size > 0 && (
+                  <button type="button" onClick={() => setSelectedProfileIds(new Set())}>
+                    Clear
+                  </button>
+                )}
+              </div>
             </header>
             <div className="match-results__stack">
               {matches.map((match) => {
-                const names = match.participants
-                  ?.map((participant) => participant.name)
-                  .filter(Boolean)
-                  .join(", ");
+                const participant = match.participants?.[0];
+                const name = participant?.name || "A new connection";
+                const profileId = participant?.id || match.id;
+                const isSelected = selectedProfileIds.has(profileId);
+                const initials = name
+                  .split(/\s+/)
+                  .slice(0, 2)
+                  .map((part) => part[0])
+                  .join("")
+                  .toUpperCase();
+                const reasons = match.matchReasons?.length
+                  ? match.matchReasons
+                  : [{ type: "schedule" as const, label: `${formatMinutes(match.overlapMinutes)} of shared availability` }];
                 return (
-                  <article className="match-result" key={match.id}>
+                  <article
+                    className={`match-result${isSelected ? " is-selected" : ""}`}
+                    key={match.id}
+                    role="checkbox"
+                    aria-checked={isSelected}
+                    tabIndex={0}
+                    onClick={() => toggleProfileSelection(profileId)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        toggleProfileSelection(profileId);
+                      }
+                    }}
+                  >
                     <div className="match-result__score">
                       <strong>{match.compatibilityScore}%</strong>
                       <span>fit</span>
                     </div>
                     <div className="match-result__body">
-                      <h3 className="landing-display">{names || "A new connection"}</h3>
-                      <p>{match.summary}</p>
-                      <div className="match-result__traits">
-                        <span>
+                      <header className="match-result__profile-header">
+                        <span className="match-result__avatar" aria-hidden="true">{initials}</span>
+                        <div>
+                          <h3 className="landing-display">{name}</h3>
+                          <p>
+                            {[participant?.major, participant?.graduationYear ? `Class of ${participant.graduationYear}` : null]
+                              .filter(Boolean)
+                              .join(" · ") || "Interlink member"}
+                          </p>
+                        </div>
+                        <span className="match-result__select-state">
                           <Check aria-hidden="true" />
-                          {Math.round(match.overlapMinutes / 60)} shared hours
+                          {isSelected ? "Selected" : "Add to group"}
                         </span>
-                        {(match.sharedHobbies ?? match.sharedInterests ?? [])
-                          .slice(0, 2)
-                          .map((trait) => <span key={trait}>{trait}</span>)}
-                      </div>
+                      </header>
+
+                      <p className="match-result__bio">{participant?.bio || match.summary}</p>
+
+                      <dl className="match-result__profile-details">
+                        {participant?.interests?.length ? (
+                          <div><dt>Interests</dt><dd>{participant.interests.join(", ")}</dd></div>
+                        ) : null}
+                        {participant?.hobbies?.length ? (
+                          <div><dt>Outside class</dt><dd>{participant.hobbies.join(", ")}</dd></div>
+                        ) : null}
+                        {participant?.classes?.length ? (
+                          <div><dt>Classes</dt><dd>{participant.classes.join(", ")}</dd></div>
+                        ) : null}
+                        {participant?.favoriteSpot ? (
+                          <div><dt>Campus spot</dt><dd>{participant.favoriteSpot}</dd></div>
+                        ) : null}
+                      </dl>
+
+                      {participant?.funFact ? (
+                        <p className="match-result__fun-fact"><span>Something memorable</span>{participant.funFact}</p>
+                      ) : null}
+
+                      <section className="match-result__why" aria-label={`Why you matched with ${name}`}>
+                        <h4>Why you matched</h4>
+                        <ul>
+                          {reasons.slice(0, 4).map((reason) => (
+                            <li key={`${reason.type}-${reason.label}`}>
+                              <Check aria-hidden="true" />
+                              <span>{reason.label}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+
+                      {MATCHMAKING_DEBUG_ENABLED && (
+                        match.rankingDebug ? (
+                          <MatchRankingDebug debug={match.rankingDebug} />
+                        ) : (
+                          <aside className="match-ranking-debug match-ranking-debug--unavailable">
+                            Ranking diagnostics were not included in this response.
+                          </aside>
+                        )
+                      )}
                     </div>
                   </article>
                 );
