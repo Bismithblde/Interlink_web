@@ -1,14 +1,10 @@
-import { useRef } from "react";
 import { Link } from "react-router-dom";
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { ScrollToPlugin } from "gsap/ScrollToPlugin";
-import { useGSAP } from "@gsap/react";
 import { useAuth } from "../context/AuthContext";
 import SignedInDashboard from "../components/SignedInDashboard";
+import LandingHeroStepCycle from "../components/LandingHeroStepCycle";
+import LandingProcessDemo from "../components/LandingProcessDemo";
+import LandingSmoothScroll from "../components/LandingSmoothScroll";
 import { ArrowRight } from "lucide-react";
-
-gsap.registerPlugin(ScrollTrigger, ScrollToPlugin, useGSAP);
 
 const landingInterests = [
   "Film",
@@ -20,280 +16,58 @@ const landingInterests = [
   "Studio art",
 ];
 
-const matchingSteps = [
-  {
-    title: "Share the hours you have",
-    description: "Mark the windows when meeting is actually possible.",
-  },
-  {
-    title: "Tell us what brings you alive",
-    description: "Classes, hobbies, places, and the pace you prefer.",
-  },
-  {
-    title: "Choose who feels right",
-    description: "See why you match before you send a request.",
-  },
-];
-
 const DashboardPage = () => {
   const { isAuthenticated } = useAuth();
-  const processSectionRef = useRef<HTMLElement>(null);
-  const processPinRef = useRef<HTMLDivElement>(null);
-
-  useGSAP(
-    () => {
-      if (isAuthenticated || !processSectionRef.current || !processPinRef.current) {
-        return;
-      }
-
-      const media = gsap.matchMedia();
-
-      media.add(
-        "(min-width: 901px)",
-        () => {
-          const section = processSectionRef.current;
-          const pin = processPinRef.current;
-
-          if (!section || !pin) {
-            return;
-          }
-
-          const scenes = gsap.utils.toArray<HTMLElement>(
-            section.querySelectorAll(".matching-preview__scene"),
-          );
-          const steps = gsap.utils.toArray<HTMLElement>(
-            section.querySelectorAll(".matching-steps li"),
-          );
-          const dots = gsap.utils.toArray<HTMLElement>(
-            section.querySelectorAll(".matching-steps__rail"),
-          );
-          const marks = gsap.utils.toArray<HTMLElement>(
-            section.querySelectorAll(".matching-preview__mark i"),
-          );
-          const progress = section.querySelector<HTMLElement>(
-            ".matching-steps__progress",
-          );
-
-          if (scenes.length < 2 || steps.length !== scenes.length || !progress) {
-            return;
-          }
-
-          gsap.set(scenes, { autoAlpha: 0, yPercent: 8, scale: 0.97, zIndex: 0 });
-          gsap.set(scenes[0], { autoAlpha: 1, yPercent: 0, scale: 1, zIndex: 1 });
-          gsap.set(steps, { opacity: 1, color: "rgba(23, 24, 23, 0.25)" });
-          gsap.set(steps[0], { color: "#171817" });
-          gsap.set(dots, { backgroundColor: "#cbc7bd", scale: 0.72 });
-          gsap.set(dots[0], { backgroundColor: "#171817", scale: 1 });
-          gsap.set(marks, { backgroundColor: "rgba(23, 24, 23, 0.18)" });
-          gsap.set(marks[0], { backgroundColor: "#171817" });
-          gsap.set(progress, { scaleY: 0, transformOrigin: "top center" });
-
-          let activeIndex = 0;
-          let scrollTween: gsap.core.Tween | null = null;
-          let releaseTimer: ReturnType<typeof window.setTimeout> | null = null;
-
-          const timeline = gsap.timeline({
-            defaults: { ease: "power2.inOut" },
-            scrollTrigger: {
-              trigger: section,
-              start: "top top",
-              end: () => `+=${Math.round(window.innerHeight * (scenes.length - 1))}`,
-              pin,
-              pinSpacing: true,
-              scrub: true,
-              anticipatePin: 1,
-              invalidateOnRefresh: true,
-              onUpdate: (self) => {
-                if (!scrollTween) {
-                  activeIndex = Math.round(self.progress * (scenes.length - 1));
-                }
-              },
-            },
-          });
-
-          const holdDuration = 1;
-          const transitionDuration = 0.55;
-          const chapterDuration = holdDuration + transitionDuration;
-          const totalDuration =
-            holdDuration * scenes.length + transitionDuration * (scenes.length - 1);
-
-          timeline.to(progress, { scaleY: 1, duration: totalDuration, ease: "none" }, 0);
-
-          for (let index = 1; index < scenes.length; index += 1) {
-            const transitionStart = holdDuration + (index - 1) * chapterDuration;
-
-            timeline
-              .to(
-                scenes[index - 1],
-                {
-                  autoAlpha: 0,
-                  yPercent: -8,
-                  scale: 0.97,
-                  zIndex: 0,
-                  duration: transitionDuration,
-                },
-                transitionStart,
-              )
-              .fromTo(
-                scenes[index],
-                { autoAlpha: 0, yPercent: 8, scale: 0.97, zIndex: 1 },
-                {
-                  autoAlpha: 1,
-                  yPercent: 0,
-                  scale: 1,
-                  zIndex: 1,
-                  duration: transitionDuration,
-                },
-                transitionStart,
-              )
-              .to(
-                steps[index - 1],
-                { color: "rgba(23, 24, 23, 0.25)", duration: transitionDuration },
-                transitionStart,
-              )
-              .to(
-                steps[index],
-                { color: "#171817", duration: transitionDuration },
-                transitionStart,
-              )
-              .to(
-                dots[index - 1],
-                {
-                  backgroundColor: "#cbc7bd",
-                  scale: 0.72,
-                  duration: transitionDuration,
-                },
-                transitionStart,
-              )
-              .to(
-                dots[index],
-                {
-                  backgroundColor: "#171817",
-                  scale: 1,
-                  duration: transitionDuration,
-                },
-                transitionStart,
-              )
-              .to(
-                marks[index - 1],
-                {
-                  backgroundColor: "rgba(23, 24, 23, 0.18)",
-                  duration: transitionDuration,
-                },
-                transitionStart,
-              )
-              .to(
-                marks[index],
-                { backgroundColor: "#171817", duration: transitionDuration },
-                transitionStart,
-              );
-          }
-
-          const transitionTo = (nextIndex: number) => {
-            const trigger = timeline.scrollTrigger;
-
-            if (!trigger || nextIndex < 0 || nextIndex >= scenes.length) {
-              return;
-            }
-
-            activeIndex = nextIndex;
-            const targetScroll =
-              trigger.start +
-              (trigger.end - trigger.start) * (nextIndex / (scenes.length - 1));
-
-            scrollTween?.kill();
-            scrollTween = gsap.to(window, {
-              scrollTo: { y: targetScroll, autoKill: false },
-              duration: 0.9,
-              ease: "power3.inOut",
-              overwrite: true,
-              onComplete: () => {
-                releaseTimer = window.setTimeout(() => {
-                  scrollTween = null;
-                  releaseTimer = null;
-                }, 180);
-              },
-            });
-          };
-
-          const handleWheel = (event: WheelEvent) => {
-            const trigger = timeline.scrollTrigger;
-
-            if (!trigger || Math.abs(event.deltaY) < 8) {
-              return;
-            }
-
-            const isWithinPinnedRange =
-              window.scrollY >= trigger.start - 1 && window.scrollY <= trigger.end + 1;
-
-            if (!isWithinPinnedRange) {
-              return;
-            }
-
-            if (scrollTween) {
-              event.preventDefault();
-              return;
-            }
-
-            const direction = event.deltaY > 0 ? 1 : -1;
-            const nextIndex = activeIndex + direction;
-
-            if (nextIndex < 0 || nextIndex >= scenes.length) {
-              return;
-            }
-
-            event.preventDefault();
-            transitionTo(nextIndex);
-          };
-
-          window.addEventListener("wheel", handleWheel, { passive: false });
-
-          return () => {
-            window.removeEventListener("wheel", handleWheel);
-            scrollTween?.kill();
-            if (releaseTimer !== null) {
-              window.clearTimeout(releaseTimer);
-            }
-            timeline.kill();
-          };
-        },
-      );
-
-      return () => media.revert();
-    },
-    { scope: processSectionRef, dependencies: [isAuthenticated] },
-  );
-
   if (!isAuthenticated) {
     return (
       <div className="interlink-landing">
+        <LandingSmoothScroll />
         <section className="landing-hero" aria-labelledby="landing-title">
-          <img
-            src="/assets/interlink-campus-dusk.png"
-            alt="A softly blurred campus at sunset"
-            className="landing-hero__image"
-          />
-          <div className="landing-hero__veil" aria-hidden="true" />
+          <div className="landing-hero__snapshots" aria-hidden="true">
+            <figure className="landing-snapshot landing-snapshot--week">
+              <div className="landing-snapshot__week-grid">
+                <span>MON</span><span>TUE</span><span>WED</span>
+                <i /><i className="is-open" /><i />
+                <i className="is-open" /><i className="is-open" /><i />
+                <i /><i /><i className="is-open" />
+              </div>
+              <figcaption>your open hours</figcaption>
+            </figure>
+            <figure className="landing-snapshot landing-snapshot--interests">
+              <div>
+                <span>film</span>
+                <span>climbing</span>
+                <span>live music</span>
+              </div>
+              <figcaption>things you already love</figcaption>
+            </figure>
+            <figure className="landing-snapshot landing-snapshot--campus">
+              <img src="/assets/interlink-campus-dusk.png" alt="" />
+              <figcaption>somewhere between class and coffee</figcaption>
+            </figure>
+            <figure className="landing-snapshot landing-snapshot--overlap">
+              <div className="landing-snapshot__overlap">
+                <span>You</span>
+                <span>Them</span>
+                <b>THU<br />4:30</b>
+              </div>
+              <figcaption>a time you both have</figcaption>
+            </figure>
+          </div>
           <div className="landing-hero__content">
             <h1 id="landing-title" className="landing-display landing-hero__title">
-              Meet your people.
+              Find someone who fits your week, shares your interests, and wants
+              the same kind of connection.
             </h1>
-            <p className="landing-hero__copy">
-              Match through the hours you share, the things you love, and the
-              kind of connection you are looking for.
-            </p>
+            <LandingHeroStepCycle />
             <Link to="/signup" className="landing-button landing-button--ink">
               Start matching
-              <ArrowRight aria-hidden="true" />
             </Link>
-            <Link to="/login" className="landing-text-link">
-              I already have an account
-            </Link>
-            <div className="landing-overlap-mark" aria-hidden="true">
-              <span />
-              <span />
-            </div>
           </div>
+          <a className="landing-hero__scroll-cue" href="#how-it-works">
+            see how matching works
+            <span aria-hidden="true" />
+          </a>
         </section>
 
         <div className="landing-atmosphere">
@@ -301,104 +75,8 @@ const DashboardPage = () => {
             id="how-it-works"
             className="landing-process"
             aria-labelledby="process-title"
-            ref={processSectionRef}
           >
-          <div className="landing-process__pin" ref={processPinRef}>
-          <div className="landing-process__inner">
-            <article className="matching-preview" aria-label="Interlink matching preview">
-              <header className="matching-preview__header">
-                <span className="landing-display">Interlink</span>
-                <span className="matching-preview__mark" aria-hidden="true">
-                  <i />
-                  <i />
-                  <i />
-                </span>
-              </header>
-
-              <div className="matching-preview__viewport">
-                <div className="matching-preview__scene is-active">
-                  <div className="matching-preview__section">
-                    <h3 className="landing-display">Set your week</h3>
-                    <p>Mark the windows when meeting is actually possible.</p>
-                    <div className="matching-week" aria-hidden="true">
-                      {[
-                        ["M", "10–12"],
-                        ["T", ""],
-                        ["W", "2–5"],
-                        ["T", ""],
-                        ["F", "4–7"],
-                        ["S", ""],
-                        ["S", "11–1"],
-                      ].map(([day, time], index) => (
-                        <span key={`${day}-${index}`} className={time ? "is-open" : ""}>
-                          <b>{day}</b>
-                          <i />
-                          <small>{time || "Closed"}</small>
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="matching-preview__scene">
-                  <div className="matching-preview__section">
-                    <h3 className="landing-display">Name your interests</h3>
-                    <p>Classes, hobbies, places, and the pace you prefer.</p>
-                    <div className="matching-interest-index" aria-hidden="true">
-                      <div className="matching-interest-index__primary">
-                        <span>Robotics</span>
-                        <span>Film</span>
-                      </div>
-                      <div className="matching-interest-index__secondary">
-                        <span>Climbing</span>
-                        <span>Late-night study</span>
-                        <span>Live music</span>
-                        <span>Coffee walks</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="matching-preview__scene">
-                  <div className="matching-preview__section matching-preview__section--overlap">
-                    <h3 className="landing-display">See the overlap</h3>
-                    <div className="matching-venn" aria-hidden="true">
-                      <span className="matching-venn__label matching-venn__label--you">You</span>
-                      <span className="matching-venn__label matching-venn__label--them">Them</span>
-                      <i className="matching-venn__circle matching-venn__circle--you" />
-                      <i className="matching-venn__circle matching-venn__circle--them" />
-                      <span className="matching-venn__tag matching-venn__tag--climbing">Climbing</span>
-                      <span className="matching-venn__tag matching-venn__tag--study">Late-night study</span>
-                      <span className="matching-venn__tag matching-venn__tag--robotics">Robotics</span>
-                      <span className="matching-venn__tag matching-venn__tag--film">Film</span>
-                      <span className="matching-venn__tag matching-venn__tag--coffee">Coffee walks</span>
-                      <span className="matching-venn__tag matching-venn__tag--music">Live music</span>
-                      <span className="matching-venn__tag matching-venn__tag--art">Studio art</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </article>
-
-            <div className="landing-process__story">
-              <h2 id="process-title" className="landing-display">
-                A match starts with overlap.
-              </h2>
-              <ol className="matching-steps">
-                <span className="matching-steps__progress" aria-hidden="true" />
-                {matchingSteps.map((step, index) => (
-                  <li key={step.title} className={index === 0 ? "is-active" : ""}>
-                    <span className="matching-steps__rail" aria-hidden="true" />
-                    <div>
-                      <h3 className="landing-display">{step.title}</h3>
-                      <p>{step.description}</p>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          </div>
-          </div>
+            <LandingProcessDemo />
           </section>
 
           <section className="landing-interests" aria-labelledby="interests-title">
